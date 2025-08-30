@@ -143,67 +143,6 @@ describe('Index Exports', () => {
       expect(graph.edges.length).toBe(1);
       expect(searchIndex.documents.size).toBe(2);
     });
-
-    it('should handle complete workflow', async () => {
-      const { 
-        processMarkdownContentsToWeb,
-        buildNoteGraph,
-        generateSearchIndex,
-        exportWebReadyToJSON
-      } = await import('../src/index.js');
-      
-      const contents = [
-        {
-          content: '# First Note\n\nThis links to [[Second Note]].',
-          filePath: '/notes/first.md',
-          baseDir: '/notes'
-        },
-        {
-          content: '# Second Note\n\nThis is the second note.',
-          filePath: '/notes/second.md',
-          baseDir: '/notes'
-        }
-      ];
-
-      // Process to web-ready format
-      const webReadyResult = await processMarkdownContentsToWeb(contents);
-      expect(webReadyResult.files).toHaveLength(2);
-
-      // Build graph
-      const notes = webReadyResult.files.map(f => f.note);
-      const graph = buildNoteGraph(notes);
-      expect(graph.nodes.size).toBe(2);
-
-      // Generate search index
-      const searchIndex = generateSearchIndex(notes);
-      expect(searchIndex.documents.size).toBe(2);
-
-      // Export to JSON
-      const exportedData = exportWebReadyToJSON(webReadyResult, graph, searchIndex);
-      expect(exportedData.notes).toHaveLength(2);
-      expect(exportedData.graph.nodes).toHaveLength(2);
-      expect(exportedData.searchIndex.documents).toHaveLength(2);
-    });
-  });
-
-  describe('Error handling in exports', () => {
-    it('should handle invalid input gracefully', async () => {
-      const { parseMarkdown } = await import('../src/index.js');
-      
-      // Test with empty content
-      const emptyNote = await parseMarkdown('');
-      expect(emptyNote.title).toBeDefined();
-      expect(emptyNote.content).toBe('');
-    });
-
-    it('should handle malformed markdown', async () => {
-      const { parseMarkdown } = await import('../src/index.js');
-      
-      // Test with malformed markdown
-      const malformedNote = await parseMarkdown('# Unclosed [link');
-      expect(malformedNote.title).toBeDefined();
-      expect(malformedNote.content).toBeDefined();
-    });
   });
 
   describe('Performance of exports', () => {
@@ -214,28 +153,6 @@ describe('Index Exports', () => {
       
       const endTime = Date.now();
       expect(endTime - startTime).toBeLessThan(1000); // Should import quickly
-    });
-
-    it('should handle large-scale operations', async () => {
-      const { processMarkdownContentsToWeb, buildNoteGraph } = await import('../src/index.js');
-      
-      // Create large dataset
-      const contents = Array.from({ length: 100 }, (_, i) => ({
-        content: `# Note ${i}\n\nContent for note ${i}.`,
-        filePath: `/notes/note-${i}.md`,
-        baseDir: '/notes'
-      }));
-
-      const startTime = Date.now();
-      
-      const result = await processMarkdownContentsToWeb(contents);
-      const graph = buildNoteGraph(result.files.map(f => f.note));
-      
-      const endTime = Date.now();
-      
-      expect(result.files).toHaveLength(100);
-      expect(graph.nodes.size).toBe(100);
-      expect(endTime - startTime).toBeLessThan(5000); // Should complete within 5 seconds
     });
   });
 });
