@@ -123,23 +123,9 @@ papyr-core/
 └── vitest.config.ts # Test configuration
 ```
 
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests for new functionality
-5. Ensure all tests pass
-6. Submit a pull request
-
 ## License
 
 MIT License - see LICENSE file for details.
-
-## Support
-
-- **Issues**: [GitHub Issues](https://github.com/Ray-kong/papyr-core/issues)
-- **Documentation**: [GitHub Wiki](https://github.com/Ray-kong/papyr-core/wiki)
 
 ## Related Packages
 
