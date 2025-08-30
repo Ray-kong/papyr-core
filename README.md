@@ -131,8 +131,8 @@ MIT License - see LICENSE file for details.
 
 ## Support
 
-- **Issues**: [GitHub Issues](https://github.com/RayKong/papyr-core/issues)
-- **Documentation**: [GitHub Wiki](https://github.com/RayKong/papyr-core/wiki)
+- **Issues**: [GitHub Issues](https://github.com/Ray-kong/papyr-core/issues)
+- **Documentation**: [GitHub Wiki](https://github.com/Ray-kong/papyr-core/wiki)
 
 ## Related Packages
 
