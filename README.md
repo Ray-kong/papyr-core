@@ -1,5 +1,12 @@
 # Papyr Core
 
+[![npm version](https://img.shields.io/npm/v/papyr-core.svg)](https://www.npmjs.com/package/papyr-core)
+[![npm downloads](https://img.shields.io/npm/dm/papyr-core.svg)](https://www.npmjs.com/package/papyr-core)
+[![coverage](https://img.shields.io/badge/coverage-0%25-red?logo=vitest&style=flat)](https://github.com/Ray-kong/papyr-core)
+[![GitHub Actions](https://img.shields.io/github/actions/workflow/status/Ray-kong/papyr-core/test-and-coverage.yml?branch=main)](https://github.com/Ray-kong/papyr-core/actions/workflows/test-and-coverage.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Node.js](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen.svg)](https://nodejs.org/)
+
 A powerful core package for building markdown-based knowledge management systems. Papyr Core provides essential functionality for parsing, analyzing, and managing interconnected markdown documents.
 
 ## Features

@@ -1,0 +1,104 @@
+name: Test and Coverage
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  test-and-coverage:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+
+    - name: Install pnpm
+      uses: pnpm/action-setup@v2
+      with:
+        version: 8
+
+    - name: Install dependencies
+      run: pnpm install --frozen-lockfile
+
+    - name: Run tests with coverage
+      run: pnpm test:coverage
+
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage/lcov.info
+        fail_ci_if_error: false
+        verbose: true
+
+    - name: Generate coverage badge
+      uses: schneegans/dynamic-badges-action@v1.6.0
+      with:
+        auth: ${{ secrets.GITHUB_TOKEN }}
+        name: coverage
+        label: coverage
+        namedLogo: vitest
+        value: ${{ steps.coverage.outputs.coverage }}
+        url: ${{ steps.coverage.outputs.url }}
+        color: ${{ steps.coverage.outputs.color }}
+        style: flat
+        logLevel: 4
+
+    - name: Extract coverage percentage
+      id: coverage
+      run: |
+        COVERAGE=$(cat coverage/lcov.info | grep -E "SF:.+|LF:.+|LH:.+" | awk 'BEGIN {LF=0; LH=0} /^LF:/ {LF+=$2} /^LH:/ {LH+=$2} END {if(LF>0) printf "%.1f", (LH/LF)*100; else print "0.0"}')
+        echo "coverage=$COVERAGE" >> $GITHUB_OUTPUT
+        
+        # Determine color based on coverage percentage
+        if (( $(echo "$COVERAGE >= 90" | bc -l) )); then
+          COLOR="brightgreen"
+        elif (( $(echo "$COVERAGE >= 80" | bc -l) )); then
+          COLOR="green"
+        elif (( $(echo "$COVERAGE >= 70" | bc -l) )); then
+          COLOR="yellow"
+        elif (( $(echo "$COVERAGE >= 60" | bc -l) )); then
+          COLOR="orange"
+        else
+          COLOR="red"
+        fi
+        echo "color=$COLOR" >> $GITHUB_OUTPUT
+        
+        # Generate badge URL
+        BADGE_URL="https://img.shields.io/badge/coverage-${COVERAGE}%25-${COLOR}?logo=vitest&style=flat"
+        echo "url=$BADGE_URL" >> $GITHUB_OUTPUT
+
+    - name: Update README with coverage badge
+      run: |
+        # Read current README
+        README_CONTENT=$(cat README.md)
+        
+        # Check if coverage badge already exists
+        if echo "$README_CONTENT" | grep -q "coverage.*badge"; then
+          # Replace existing coverage badge
+          README_CONTENT=$(echo "$README_CONTENT" | sed "s|!\[coverage\].*|![coverage](${{ steps.coverage.outputs.url }})|")
+        else
+          # Add coverage badge after the title
+          README_CONTENT=$(echo "$README_CONTENT" | sed "1a\\n![coverage](${{ steps.coverage.outputs.url }})\\n")
+        fi
+        
+        # Write updated README
+        echo "$README_CONTENT" > README.md
+
+    - name: Commit and push coverage badge
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add README.md
+        git diff --quiet && git diff --staged --quiet || git commit -m "docs: update coverage badge [skip ci]"
+        git push
