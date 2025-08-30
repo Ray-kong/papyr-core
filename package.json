@@ -34,12 +34,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Ray-kong/papyr-core.git"
+    "url": "git+https://github.com/RayKong/papyr-core.git"
   },
   "bugs": {
-    "url": "https://github.com/Ray-kong/papyr-core/issues"
+    "url": "https://github.com/RayKong/papyr-core/issues"
   },
-  "homepage": "https://github.com/Ray-kong/papyr-core#readme",
+  "homepage": "https://github.com/RayKong/papyr-core#readme",
   "dependencies": {
     "flexsearch": "^0.7.31",
     "gray-matter": "^4.0.3",
