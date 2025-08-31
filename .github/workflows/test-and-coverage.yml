@@ -72,25 +72,14 @@ jobs:
 
     - name: Update README with coverage badge
       run: |
-        # Read current README
-        README_CONTENT=$(cat README.md)
-        
         # Generate new coverage badge
         COVERAGE="${{ steps.coverage.outputs.coverage }}"
         COLOR="${{ steps.coverage.outputs.color }}"
         BADGE_URL="https://img.shields.io/badge/coverage-${COVERAGE}%25-${COLOR}?logo=vitest&style=flat"
         
-        # Check if coverage badge already exists
-        if echo "$README_CONTENT" | grep -q "!\[coverage\]"; then
-          # Replace existing coverage badge
-          README_CONTENT=$(echo "$README_CONTENT" | sed "s|!\[coverage\].*|![coverage]($BADGE_URL)|")
-        else
-          # Add coverage badge after the title
-          README_CONTENT=$(echo "$README_CONTENT" | sed "1a\\n![coverage]($BADGE_URL)\\n")
-        fi
-        
-        # Write updated README
-        echo "$README_CONTENT" > README.md
+        # Use sed to replace the entire coverage badge line
+        # This regex matches the full coverage badge line and replaces it completely
+        sed -i "s|^\[\!\[coverage\].*$|[![coverage]($BADGE_URL)](https://github.com/Ray-kong/papyr-core)|" README.md
 
     - name: Commit and push coverage badge
       run: |
