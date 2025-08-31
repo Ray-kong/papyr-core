@@ -41,19 +41,6 @@ jobs:
         fail_ci_if_error: false
         verbose: true
 
-    - name: Generate coverage badge
-      uses: schneegans/dynamic-badges-action@v1.6.0
-      with:
-        auth: ${{ secrets.GITHUB_TOKEN }}
-        name: coverage
-        label: coverage
-        namedLogo: vitest
-        value: ${{ steps.coverage.outputs.coverage }}
-        url: ${{ steps.coverage.outputs.url }}
-        color: ${{ steps.coverage.outputs.color }}
-        style: flat
-        logLevel: 4
-
     - name: Extract coverage percentage
       id: coverage
       run: |
@@ -73,23 +60,24 @@ jobs:
           COLOR="red"
         fi
         echo "color=$COLOR" >> $GITHUB_OUTPUT
-        
-        # Generate badge URL
-        BADGE_URL="https://img.shields.io/badge/coverage-${COVERAGE}%25-${COLOR}?logo=vitest&style=flat"
-        echo "url=$BADGE_URL" >> $GITHUB_OUTPUT
 
     - name: Update README with coverage badge
       run: |
         # Read current README
         README_CONTENT=$(cat README.md)
         
+        # Generate new coverage badge
+        COVERAGE="${{ steps.coverage.outputs.coverage }}"
+        COLOR="${{ steps.coverage.outputs.color }}"
+        BADGE_URL="https://img.shields.io/badge/coverage-${COVERAGE}%25-${COLOR}?logo=vitest&style=flat"
+        
         # Check if coverage badge already exists
-        if echo "$README_CONTENT" | grep -q "coverage.*badge"; then
+        if echo "$README_CONTENT" | grep -q "!\[coverage\]"; then
           # Replace existing coverage badge
-          README_CONTENT=$(echo "$README_CONTENT" | sed "s|!\[coverage\].*|![coverage](${{ steps.coverage.outputs.url }})|")
+          README_CONTENT=$(echo "$README_CONTENT" | sed "s|!\[coverage\].*|![coverage]($BADGE_URL)|")
         else
           # Add coverage badge after the title
-          README_CONTENT=$(echo "$README_CONTENT" | sed "1a\\n![coverage](${{ steps.coverage.outputs.url }})\\n")
+          README_CONTENT=$(echo "$README_CONTENT" | sed "1a\\n![coverage]($BADGE_URL)\\n")
         fi
         
         # Write updated README
@@ -100,5 +88,5 @@ jobs:
         git config --local user.email "action@github.com"
         git config --local user.name "GitHub Action"
         git add README.md
-        git diff --quiet && git diff --staged --quiet || git commit -m "docs: update coverage badge [skip ci]"
+        git diff --quiet && git diff --staged --quiet || git commit -m "docs: update coverage badge to ${{ steps.coverage.outputs.coverage }}% [skip ci]"
         git push
