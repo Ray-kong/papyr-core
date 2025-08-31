@@ -48,7 +48,12 @@ jobs:
     - name: Extract coverage percentage
       id: coverage
       run: |
-        COVERAGE=$(cat coverage/lcov.info | grep -E "SF:.+|LF:.+|LH:.+" | awk 'BEGIN {LF=0; LH=0} /^LF:/ {LF+=$2} /^LH:/ {LH+=$2} END {if(LF>0) printf "%.1f", (LH/LF)*100; else print "0.0"}')
+        if [ -f coverage/lcov.info ]; then
+          COVERAGE=$(awk 'BEGIN {LF=0; LH=0} /^LF:/ {gsub(/LF:/,""); LF+=$1} /^LH:/ {gsub(/LH:/,""); LH+=$1} END {if(LF>0) printf "%.1f", (LH/LF)*100; else print "0.0"}' coverage/lcov.info)
+        else
+          echo "Coverage file not found, using 0.0"
+          COVERAGE="0.0"
+        fi
         echo "coverage=$COVERAGE" >> $GITHUB_OUTPUT
         
         # Determine color based on coverage percentage

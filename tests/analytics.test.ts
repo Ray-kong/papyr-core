@@ -31,7 +31,8 @@ describe('AnalyticsEngine', () => {
     };
 
     mockGraph = {
-      nodes: new Map([['note1', mockNode]]),
+      nodes: new Map([['note1',
+         mockNode]]),
       edges: [],
       backlinks: new Map(),
       orphans: new Set()
