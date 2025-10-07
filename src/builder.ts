@@ -27,27 +27,42 @@ export class PapyrBuilder {
   private fileWatcher?: fs.FSWatcher;
 
   constructor(config: BuildConfig) {
+    const {
+      patterns,
+      processing,
+      output,
+      watch,
+      ...restConfig
+    } = config;
+
+    const mergePatterns = (defaults: string[], overrides?: string[]) => {
+      if (!overrides || overrides.length === 0) {
+        return defaults;
+      }
+
+      return Array.from(new Set([...defaults, ...overrides]));
+    };
+
     this.config = {
+      ...restConfig,
       patterns: {
-        include: ['**/*.md'],
-        exclude: ['node_modules/**', '.git/**'],
-        ...config.patterns
+        include: mergePatterns(['**/*.md'], patterns?.include),
+        exclude: mergePatterns(['node_modules/**', '.git/**'], patterns?.exclude)
       },
       processing: {
         generateExcerpts: true,
         calculateReadingTime: true,
         extractKeywords: true,
         processImages: false,
-        ...config.processing
+        ...processing
       },
       output: {
         formats: ['json'],
         separateFiles: true,
         compress: false,
-        ...config.output
+        ...output
       },
-      watch: false,
-      ...config
+      watch: watch ?? false
     };
 
     // Ensure output directory exists
@@ -96,6 +111,8 @@ export class PapyrBuilder {
       // Calculate analytics
       console.log('📊 Calculating analytics...');
       const analytics = this.calculateAnalytics(notes, graph);
+
+      analytics.basic.buildTime = buildTime;
 
       const buildTime = Date.now() - startTime;
 
@@ -352,9 +369,11 @@ export class PapyrBuilder {
    */
   private serializeForJSON(obj: any): any {
     if (obj instanceof Map) {
-      return Object.fromEntries(obj);
+      return Object.fromEntries(
+        Array.from(obj.entries()).map(([key, value]) => [key, this.serializeForJSON(value)])
+      );
     } else if (obj instanceof Set) {
-      return Array.from(obj);
+      return Array.from(obj).map(value => this.serializeForJSON(value));
     } else if (obj && typeof obj === 'object') {
       const result: any = Array.isArray(obj) ? [] : {};
       for (const [key, value] of Object.entries(obj)) {

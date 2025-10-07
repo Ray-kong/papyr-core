@@ -95,27 +95,43 @@ export class AnalyticsEngine {
    * Calculate content analytics
    */
   private calculateContentAnalytics(notes: WebReadyNote[]): ContentAnalytics {
-    const wordCounts = notes.map(note => note.wordCount || 0).filter(count => count > 0);
-    const readingTimes = notes.map(note => note.readingTime || 0).filter(time => time > 0);
+    const wordCounts = notes
+      .map(note => note.wordCount || 0)
+      .filter(count => count > 0);
+    const readingTimes = notes
+      .map(note => note.readingTime || 0)
+      .filter(time => time > 0);
     const linkCounts = notes.map(note => note.linksTo.length);
+
+    const averageWordCount = wordCounts.length > 0
+      ? wordCounts.reduce((sum, count) => sum + count, 0) / wordCounts.length
+      : 0;
+    const averageReadingTime = readingTimes.length > 0
+      ? readingTimes.reduce((sum, time) => sum + time, 0) / readingTimes.length
+      : 0;
+    const averageLinks = linkCounts.length > 0
+      ? linkCounts.reduce((sum, count) => sum + count, 0) / linkCounts.length
+      : 0;
 
     return {
       wordDistribution: {
-        min: Math.min(...wordCounts),
-        max: Math.max(...wordCounts),
-        average: wordCounts.reduce((sum, count) => sum + count, 0) / wordCounts.length,
+        min: wordCounts.length > 0 ? Math.min(...wordCounts) : 0,
+        max: wordCounts.length > 0 ? Math.max(...wordCounts) : 0,
+        average: averageWordCount,
         median: this.calculateMedian(wordCounts)
       },
       readingTimeDistribution: {
-        min: Math.min(...readingTimes),
-        max: Math.max(...readingTimes),
-        average: readingTimes.reduce((sum, time) => sum + time, 0) / readingTimes.length
+        min: readingTimes.length > 0 ? Math.min(...readingTimes) : 0,
+        max: readingTimes.length > 0 ? Math.max(...readingTimes) : 0,
+        average: averageReadingTime
       },
       linkDensity: {
-        average: linkCounts.reduce((sum, count) => sum + count, 0) / linkCounts.length,
+        average: averageLinks,
         distribution: this.calculateDistribution(linkCounts)
       },
-      orphanageRate: notes.length > 0 ? (notes.filter(note => note.linksTo.length === 0).length / notes.length) : 0
+      orphanageRate: notes.length > 0
+        ? (notes.filter(note => note.linksTo.length === 0).length / notes.length)
+        : 0
     };
   }
 
@@ -164,7 +180,7 @@ export class AnalyticsEngine {
       .map(([tag, count]) => ({
         tag,
         count,
-        percentage: (count / notes.length) * 100
+        percentage: notes.length > 0 ? (count / notes.length) * 100 : 0
       }))
       .sort((a, b) => b.count - a.count)
       .slice(0, 20);
@@ -292,14 +308,18 @@ export class AnalyticsEngine {
    * Calculate median value
    */
   private calculateMedian(values: number[]): number {
+    if (values.length === 0) {
+      return 0;
+    }
+
     const sorted = [...values].sort((a, b) => a - b);
     const mid = Math.floor(sorted.length / 2);
-    
+
     if (sorted.length % 2 === 0) {
       return (sorted[mid - 1] + sorted[mid]) / 2;
-    } else {
-      return sorted[mid];
     }
+
+    return sorted[mid];
   }
 
   /**

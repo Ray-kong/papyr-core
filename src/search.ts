@@ -28,12 +28,18 @@ export function generateSearchIndex(
   // Create document-based index for multi-field search
   // FlexSearch Document has restrictive types, so we'll use a basic configuration
   const index = new FlexSearch.Document({
-    preset: 'default' as any,
-    tokenize: 'forward' as any,
+    preset: preset as any,
+    tokenize: tokenize as any,
     resolution,
+    context: { depth },
     document: {
       id: 'slug',
-      field: ['title', 'content', 'tags', 'metadata']
+      index: [
+        { field: 'title', tokenize: tokenize as any, preset: preset as any },
+        { field: 'content', tokenize: tokenize as any, preset: preset as any },
+        { field: 'tags', tokenize: tokenize as any, preset: preset as any },
+        { field: 'metadata', tokenize: tokenize as any, preset: preset as any }
+      ]
     }
   })
 
