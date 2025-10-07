@@ -2,7 +2,7 @@
 
 [![npm version](https://img.shields.io/npm/v/papyr-core.svg)](https://www.npmjs.com/package/papyr-core)
 [![npm downloads](https://img.shields.io/npm/dm/papyr-core.svg)](https://www.npmjs.com/package/papyr-core)
-[![coverage](https://img.shields.io/badge/coverage-81.1%25-green?logo=vitest[![coverage](https://img.shields.io/badge/coverage-83.9%25-green?logo=vitest&style=flat)](https://github.com/Ray-kong/papyr-core)style=flat)](https://github.com/Ray-kong/papyr-core)
+[![coverage](https://img.shields.io/badge/coverage-80.2%25-green?logo=vitest[![coverage](https://img.shields.io/badge/coverage-81.1%25-green?logo=vitest[![coverage](https://img.shields.io/badge/coverage-83.9%25-green?logo=vitest&style=flat)](https://github.com/Ray-kong/papyr-core)style=flat)](https://github.com/Ray-kong/papyr-core)style=flat)](https://github.com/Ray-kong/papyr-core)
 [![GitHub Actions](https://img.shields.io/github/actions/workflow/status/Ray-kong/papyr-core/test-and-coverage.yml?branch=main)](https://github.com/Ray-kong/papyr-core/actions/workflows/test-and-coverage.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen.svg)](https://nodejs.org/)
