@@ -99,3 +99,6 @@ jspm_packages/
 
 # TernJS port file
 .tern-port
+AGENTS.md
+doc.md
+todo.md
