@@ -112,9 +112,8 @@ export class PapyrBuilder {
       console.log('📊 Calculating analytics...');
       const analytics = this.calculateAnalytics(notes, graph);
 
-      analytics.basic.buildTime = buildTime;
-
       const buildTime = Date.now() - startTime;
+      analytics.basic.buildTime = buildTime;
 
       // Create build info
       const buildInfo: BuildInfo = {
