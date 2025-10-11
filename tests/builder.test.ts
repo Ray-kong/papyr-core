@@ -1,0 +1,617 @@
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as os from 'os';
+import { PapyrBuilder, type BuildConfig } from '../src/builder.js';
+
+// Mock the dependencies
+vi.mock('../src/index.js', () => ({
+  processMarkdownContentsToWeb: vi.fn(),
+  buildNoteGraph: vi.fn(),
+  generateSearchIndex: vi.fn()
+}));
+
+vi.mock('../src/analytics.js', () => ({
+  AnalyticsEngine: vi.fn().mockImplementation(() => ({
+    calculateAnalytics: vi.fn().mockReturnValue({
+      basic: {
+        totalNotes: 2,
+        totalLinks: 1,
+        orphanedNotes: 0,
+        averageConnections: 0.5,
+        buildTime: 100
+      },
+      tags: {
+        topTags: [{ tag: 'test', count: 1 }]
+      }
+    })
+  }))
+}));
+
+describe('PapyrBuilder', () => {
+  let tempDir: string;
+  let outputDir: string;
+  let sourceDir: string;
+
+  beforeEach(async () => {
+    // Create temporary directories using cross-platform temp dir
+    const tmpPrefix = path.join(os.tmpdir(), 'papyr-test-');
+    tempDir = await fs.promises.mkdtemp(tmpPrefix);
+    sourceDir = path.join(tempDir, 'source');
+    outputDir = path.join(tempDir, 'output');
+    
+    await fs.promises.mkdir(sourceDir, { recursive: true });
+    await fs.promises.mkdir(outputDir, { recursive: true });
+  });
+
+  afterEach(async () => {
+    // Clean up temporary directories
+    await fs.promises.rm(tempDir, { recursive: true, force: true });
+  });
+
+  describe('Constructor', () => {
+    it('should create builder with default config', () => {
+      const config: BuildConfig = {
+        sourceDir,
+        outputDir
+      };
+
+      const builder = new PapyrBuilder(config);
+
+      expect(builder).toBeDefined();
+      // Verify output directory was created
+      expect(fs.existsSync(outputDir)).toBe(true);
+    });
+
+    it('should merge custom patterns with defaults', () => {
+      const config: BuildConfig = {
+        sourceDir,
+        outputDir,
+        patterns: {
+          include: ['**/*.txt', '**/*.md'],
+          exclude: ['**/temp/**']
+        }
+      };
+
+      const builder = new PapyrBuilder(config);
+      expect(builder).toBeDefined();
+    });
+
+    it('should merge custom processing options', () => {
+      const config: BuildConfig = {
+        sourceDir,
+        outputDir,
+        processing: {
+          generateExcerpts: false,
+          calculateReadingTime: false,
+          extractKeywords: true,
+          processImages: true
+        }
+      };
+
+      const builder = new PapyrBuilder(config);
+      expect(builder).toBeDefined();
+    });
+
+    it('should merge custom output options', () => {
+      const config: BuildConfig = {
+        sourceDir,
+        outputDir,
+        output: {
+          formats: ['json', 'csv'],
+          separateFiles: false,
+          compress: true
+        }
+      };
+
+      const builder = new PapyrBuilder(config);
+      expect(builder).toBeDefined();
+    });
+
+    it('should create output directory if it does not exist', async () => {
+      const nonExistentDir = path.join(tempDir, 'non-existent');
+      const config: BuildConfig = {
+        sourceDir,
+        outputDir: nonExistentDir
+      };
+
+      expect(fs.existsSync(nonExistentDir)).toBe(false);
+      
+      const builder = new PapyrBuilder(config);
+      
+      expect(fs.existsSync(nonExistentDir)).toBe(true);
+    });
+  });
+
+  describe('Build Pipeline', () => {
+    it('should execute successful build', async () => {
+      // Create test markdown files
+      await fs.promises.writeFile(
+        path.join(sourceDir, 'note1.md'),
+        '# Note 1\n\nContent with [[Note 2]] link.'
+      );
+      await fs.promises.writeFile(
+        path.join(sourceDir, 'note2.md'),
+        '# Note 2\n\nContent of note 2.'
+      );
+
+      const { processMarkdownContentsToWeb, buildNoteGraph, generateSearchIndex } = await import('../src/index.js');
+      
+      // Mock the dependencies
+      const mockNotes = [
+        { id: 'note1', title: 'Note 1', content: 'Content with [[Note 2]] link.' },
+        { id: 'note2', title: 'Note 2', content: 'Content of note 2.' }
+      ];
+      
+      vi.mocked(processMarkdownContentsToWeb).mockResolvedValue({
+        files: mockNotes.map(note => ({ note })),
+        errors: []
+      });
+      vi.mocked(buildNoteGraph).mockReturnValue({ nodes: new Map(), edges: [] });
+      vi.mocked(generateSearchIndex).mockReturnValue({ documents: new Map() });
+
+      const config: BuildConfig = {
+        sourceDir,
+        outputDir
+      };
+
+      const builder = new PapyrBuilder(config);
+      const result = await builder.build();
+
+      expect(result).toBeDefined();
+      expect(result.notes).toHaveLength(2);
+      expect(result.graph).toBeDefined();
+      expect(result.searchIndex).toBeDefined();
+      expect(result.analytics).toBeDefined();
+      expect(result.buildInfo).toBeDefined();
+    });
+
+    it('should handle build with processing errors', async () => {
+      await fs.promises.writeFile(
+        path.join(sourceDir, 'note1.md'),
+        '# Note 1\n\nContent.'
+      );
+
+      const { processMarkdownContentsToWeb, buildNoteGraph, generateSearchIndex } = await import('../src/index.js');
+      
+      vi.mocked(processMarkdownContentsToWeb).mockResolvedValue({
+        files: [],
+        errors: [
+          {
+            filePath: 'note1.md',
+            error: new Error('Processing failed')
+          }
+        ]
+      });
+      vi.mocked(buildNoteGraph).mockReturnValue({ nodes: new Map(), edges: [] });
+      vi.mocked(generateSearchIndex).mockReturnValue({ documents: new Map() });
+
+      const config: BuildConfig = {
+        sourceDir,
+        outputDir
+      };
+
+      const builder = new PapyrBuilder(config);
+      const result = await builder.build();
+
+      expect(result.buildInfo.sources.errors).toHaveLength(1);
+      expect(result.buildInfo.sources.errors[0].file).toBe('note1.md');
+    });
+
+    it('should calculate build time', async () => {
+      await fs.promises.writeFile(
+        path.join(sourceDir, 'note1.md'),
+        '# Note 1\n\nContent.'
+      );
+
+      const { processMarkdownContentsToWeb, buildNoteGraph, generateSearchIndex } = await import('../src/index.js');
+      
+      vi.mocked(processMarkdownContentsToWeb).mockResolvedValue({
+        files: [{ note: { id: 'note1', title: 'Note 1' } }],
+        errors: []
+      });
+      vi.mocked(buildNoteGraph).mockReturnValue({ nodes: new Map(), edges: [] });
+      vi.mocked(generateSearchIndex).mockReturnValue({ documents: new Map() });
+
+      const config: BuildConfig = {
+        sourceDir,
+        outputDir
+      };
+
+      const builder = new PapyrBuilder(config);
+      const result = await builder.build();
+
+      expect(result.buildInfo.duration).toBeGreaterThanOrEqual(0);
+      expect(result.analytics.basic.buildTime).toBeGreaterThanOrEqual(0);
+    });
+  });
+
+  describe('File Discovery', () => {
+    it('should discover markdown files', async () => {
+      await fs.promises.writeFile(path.join(sourceDir, 'note1.md'), '# Note 1');
+      await fs.promises.writeFile(path.join(sourceDir, 'note2.md'), '# Note 2');
+      await fs.promises.writeFile(path.join(sourceDir, 'readme.txt'), 'Not markdown');
+
+      const config: BuildConfig = {
+        sourceDir,
+        outputDir
+      };
+
+      const builder = new PapyrBuilder(config);
+      
+      // Access private method for testing
+      const discoverSourceFiles = (builder as any).discoverSourceFiles.bind(builder);
+      const files = await discoverSourceFiles();
+
+      expect(files).toHaveLength(2);
+      expect(files.some(f => f.relativePath === 'note1.md')).toBe(true);
+      expect(files.some(f => f.relativePath === 'note2.md')).toBe(true);
+    });
+
+    it('should exclude node_modules and .git directories', async () => {
+      await fs.promises.mkdir(path.join(sourceDir, 'node_modules'), { recursive: true });
+      await fs.promises.mkdir(path.join(sourceDir, '.git'), { recursive: true });
+      await fs.promises.writeFile(path.join(sourceDir, 'node_modules', 'package.md'), '# Package');
+      await fs.promises.writeFile(path.join(sourceDir, '.git', 'config.md'), '# Config');
+      await fs.promises.writeFile(path.join(sourceDir, 'note1.md'), '# Note 1');
+
+      const config: BuildConfig = {
+        sourceDir,
+        outputDir
+      };
+
+      const builder = new PapyrBuilder(config);
+      const discoverSourceFiles = (builder as any).discoverSourceFiles.bind(builder);
+      const files = await discoverSourceFiles();
+
+      expect(files).toHaveLength(1);
+      expect(files[0].relativePath).toBe('note1.md');
+    });
+
+    it('should handle custom include patterns', async () => {
+      await fs.promises.writeFile(path.join(sourceDir, 'note1.md'), '# Note 1');
+      await fs.promises.writeFile(path.join(sourceDir, 'note1.txt'), '# Note 1 Text');
+      await fs.promises.mkdir(path.join(sourceDir, 'subdir'), { recursive: true });
+      await fs.promises.writeFile(path.join(sourceDir, 'subdir', 'note2.md'), '# Note 2');
+
+      const config: BuildConfig = {
+        sourceDir,
+        outputDir,
+        patterns: {
+          include: ['*.txt', 'subdir/**/*.md']
+        }
+      };
+
+      const builder = new PapyrBuilder(config);
+      const discoverSourceFiles = (builder as any).discoverSourceFiles.bind(builder);
+      const files = await discoverSourceFiles();
+
+      expect(files).toHaveLength(3);
+      expect(files.some(f => f.relativePath === 'note1.md')).toBe(true);
+      expect(files.some(f => f.relativePath === 'note1.txt')).toBe(true);
+      expect(files.some(f => f.relativePath === 'subdir/note2.md')).toBe(true);
+    });
+
+    it('should handle custom exclude patterns', async () => {
+      await fs.promises.writeFile(path.join(sourceDir, 'note1.md'), '# Note 1');
+      await fs.promises.writeFile(path.join(sourceDir, 'draft.md'), '# Draft');
+      await fs.promises.mkdir(path.join(sourceDir, 'drafts'), { recursive: true });
+      await fs.promises.writeFile(path.join(sourceDir, 'drafts', 'note2.md'), '# Note 2');
+
+      const config: BuildConfig = {
+        sourceDir,
+        outputDir,
+        patterns: {
+          exclude: ['draft*.md', 'drafts/**']
+        }
+      };
+
+      const builder = new PapyrBuilder(config);
+      const discoverSourceFiles = (builder as any).discoverSourceFiles.bind(builder);
+      const files = await discoverSourceFiles();
+
+      expect(files).toHaveLength(1);
+      expect(files[0].relativePath).toBe('note1.md');
+    });
+
+    it('should handle empty directory', async () => {
+      const config: BuildConfig = {
+        sourceDir,
+        outputDir
+      };
+
+      const builder = new PapyrBuilder(config);
+      const discoverSourceFiles = (builder as any).discoverSourceFiles.bind(builder);
+      const files = await discoverSourceFiles();
+
+      expect(files).toHaveLength(0);
+    });
+  });
+
+  describe('Pattern Matching', () => {
+    it('should match standard **/*.md pattern', () => {
+      const config: BuildConfig = {
+        sourceDir,
+        outputDir
+      };
+
+      const builder = new PapyrBuilder(config);
+      const matchesPattern = (builder as any).matchesPattern.bind(builder);
+
+      expect(matchesPattern('note.md', '**/*.md')).toBe(true);
+      expect(matchesPattern('subdir/note.md', '**/*.md')).toBe(true);
+      expect(matchesPattern('deep/nested/note.md', '**/*.md')).toBe(true);
+      expect(matchesPattern('note.txt', '**/*.md')).toBe(false);
+    });
+
+    it('should match custom glob patterns', () => {
+      const config: BuildConfig = {
+        sourceDir,
+        outputDir
+      };
+
+      const builder = new PapyrBuilder(config);
+      const matchesPattern = (builder as any).matchesPattern.bind(builder);
+
+      expect(matchesPattern('note.txt', '*.txt')).toBe(true);
+      expect(matchesPattern('subdir/note.txt', '*.txt')).toBe(false);
+      expect(matchesPattern('subdir/note.txt', '**/*.txt')).toBe(true);
+      expect(matchesPattern('note?.md', 'note?.md')).toBe(true); // Question mark wildcard is supported
+    });
+
+    it('should handle exclusion patterns', () => {
+      const config: BuildConfig = {
+        sourceDir,
+        outputDir
+      };
+
+      const builder = new PapyrBuilder(config);
+      const shouldExcludeFile = (builder as any).shouldExcludeFile.bind(builder);
+
+      // Test with default exclude patterns
+      expect(shouldExcludeFile('node_modules/package.md')).toBe(true);
+      expect(shouldExcludeFile('.git/config.md')).toBe(true);
+      expect(shouldExcludeFile('note.md')).toBe(false);
+    });
+  });
+
+  describe('Processing Toggles', () => {
+    it('should create builder with custom processing options', () => {
+      const config: BuildConfig = {
+        sourceDir,
+        outputDir,
+        processing: {
+          generateExcerpts: false,
+          calculateReadingTime: false,
+          extractKeywords: true,
+          processImages: true
+        }
+      };
+
+      const builder = new PapyrBuilder(config);
+      expect(builder).toBeDefined();
+    });
+
+    it('should handle image processing configuration', () => {
+      const config: BuildConfig = {
+        sourceDir,
+        outputDir,
+        processing: {
+          processImages: true
+        }
+      };
+
+      const builder = new PapyrBuilder(config);
+      expect(builder).toBeDefined();
+    });
+  });
+
+  describe('Serialization', () => {
+    it('should serialize Maps correctly', () => {
+      const config: BuildConfig = {
+        sourceDir,
+        outputDir
+      };
+
+      const builder = new PapyrBuilder(config);
+      const serializeForJSON = (builder as any).serializeForJSON.bind(builder);
+
+      const map = new Map([
+        ['key1', 'value1'],
+        ['key2', 'value2']
+      ]);
+
+      const result = serializeForJSON(map);
+      expect(result).toEqual({
+        key1: 'value1',
+        key2: 'value2'
+      });
+    });
+
+    it('should serialize Sets correctly', () => {
+      const config: BuildConfig = {
+        sourceDir,
+        outputDir
+      };
+
+      const builder = new PapyrBuilder(config);
+      const serializeForJSON = (builder as any).serializeForJSON.bind(builder);
+
+      const set = new Set(['item1', 'item2', 'item3']);
+      const result = serializeForJSON(set);
+      
+      expect(Array.isArray(result)).toBe(true);
+      expect(result).toContain('item1');
+      expect(result).toContain('item2');
+      expect(result).toContain('item3');
+    });
+
+    it('should serialize nested objects correctly', () => {
+      const config: BuildConfig = {
+        sourceDir,
+        outputDir
+      };
+
+      const builder = new PapyrBuilder(config);
+      const serializeForJSON = (builder as any).serializeForJSON.bind(builder);
+
+      const nested = {
+        map: new Map([['key', 'value']]),
+        set: new Set(['item']),
+        array: [1, 2, 3],
+        primitive: 'test'
+      };
+
+      const result = serializeForJSON(nested);
+      expect(result).toEqual({
+        map: { key: 'value' },
+        set: ['item'],
+        array: [1, 2, 3],
+        primitive: 'test'
+      });
+    });
+  });
+
+  describe('Watch Functionality', () => {
+    it('should create builder with watch enabled', () => {
+      const config: BuildConfig = {
+        sourceDir,
+        outputDir,
+        watch: true
+      };
+
+      const builder = new PapyrBuilder(config);
+      expect(builder).toBeDefined();
+    });
+
+    it('should stop watching files when no watcher exists', () => {
+      const config: BuildConfig = {
+        sourceDir,
+        outputDir
+      };
+
+      const builder = new PapyrBuilder(config);
+      
+      // Should not throw when no watcher exists
+      expect(() => builder.stopWatching()).not.toThrow();
+    });
+
+    it('should stop watching files when watcher exists', () => {
+      const config: BuildConfig = {
+        sourceDir,
+        outputDir
+      };
+
+      const builder = new PapyrBuilder(config);
+      const mockWatcher = {
+        close: vi.fn()
+      };
+      
+      // Set up a mock watcher
+      (builder as any).fileWatcher = mockWatcher;
+
+      builder.stopWatching();
+
+      expect(mockWatcher.close).toHaveBeenCalled();
+      expect((builder as any).fileWatcher).toBeUndefined();
+    });
+  });
+
+  describe('Output', () => {
+    it('should save files with correct content', async () => {
+      const config: BuildConfig = {
+        sourceDir,
+        outputDir
+      };
+
+      const builder = new PapyrBuilder(config);
+      const saveToFile = (builder as any).saveToFile.bind(builder);
+
+      const testData = { test: 'data' };
+      await saveToFile('test.json', testData);
+
+      const filePath = path.join(outputDir, 'test.json');
+      expect(fs.existsSync(filePath)).toBe(true);
+
+      const content = await fs.promises.readFile(filePath, 'utf-8');
+      expect(JSON.parse(content)).toEqual(testData);
+    });
+
+    it('should handle string data in saveToFile', async () => {
+      const config: BuildConfig = {
+        sourceDir,
+        outputDir
+      };
+
+      const builder = new PapyrBuilder(config);
+      const saveToFile = (builder as any).saveToFile.bind(builder);
+
+      const testString = 'test string content';
+      await saveToFile('test.txt', testString);
+
+      const filePath = path.join(outputDir, 'test.txt');
+      const content = await fs.promises.readFile(filePath, 'utf-8');
+      expect(content).toBe(testString);
+    });
+
+    it('should handle separateFiles configuration', async () => {
+      await fs.promises.writeFile(path.join(sourceDir, 'note1.md'), '# Note 1');
+
+      const { processMarkdownContentsToWeb, buildNoteGraph, generateSearchIndex } = await import('../src/index.js');
+      
+      vi.mocked(processMarkdownContentsToWeb).mockResolvedValue({
+        files: [{ note: { id: 'note1', title: 'Note 1' } }],
+        errors: []
+      });
+      vi.mocked(buildNoteGraph).mockReturnValue({ nodes: new Map(), edges: [] });
+      vi.mocked(generateSearchIndex).mockReturnValue({ documents: new Map() });
+
+      const config: BuildConfig = {
+        sourceDir,
+        outputDir,
+        output: {
+          separateFiles: true
+        }
+      };
+
+      const builder = new PapyrBuilder(config);
+      await builder.build();
+
+      // Check that separate files were created
+      expect(fs.existsSync(path.join(outputDir, 'notes.json'))).toBe(true);
+      expect(fs.existsSync(path.join(outputDir, 'graph.json'))).toBe(true);
+      expect(fs.existsSync(path.join(outputDir, 'search-index.json'))).toBe(true);
+      expect(fs.existsSync(path.join(outputDir, 'analytics.json'))).toBe(true);
+      expect(fs.existsSync(path.join(outputDir, 'build-info.json'))).toBe(true);
+      expect(fs.existsSync(path.join(outputDir, 'papyr-data.json'))).toBe(true);
+    });
+
+    it('should handle combined output when separateFiles is false', async () => {
+      await fs.promises.writeFile(path.join(sourceDir, 'note1.md'), '# Note 1');
+
+      const { processMarkdownContentsToWeb, buildNoteGraph, generateSearchIndex } = await import('../src/index.js');
+      
+      vi.mocked(processMarkdownContentsToWeb).mockResolvedValue({
+        files: [{ note: { id: 'note1', title: 'Note 1' } }],
+        errors: []
+      });
+      vi.mocked(buildNoteGraph).mockReturnValue({ nodes: new Map(), edges: [] });
+      vi.mocked(generateSearchIndex).mockReturnValue({ documents: new Map() });
+
+      const config: BuildConfig = {
+        sourceDir,
+        outputDir,
+        output: {
+          separateFiles: false
+        }
+      };
+
+      const builder = new PapyrBuilder(config);
+      await builder.build();
+
+      // Check that only combined file was created
+      expect(fs.existsSync(path.join(outputDir, 'papyr-data.json'))).toBe(true);
+      expect(fs.existsSync(path.join(outputDir, 'notes.json'))).toBe(false);
+    });
+  });
+});

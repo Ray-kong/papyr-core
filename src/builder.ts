@@ -209,10 +209,11 @@ export class PapyrBuilder {
         for (const entry of entries) {
           const fullPath = path.join(currentDir, entry.name);
           const relativePath = path.relative(this.config.sourceDir, fullPath);
+          const normalizedRelativePath = this.normalizeGlobPath(relativePath);
           
           // Check exclusion patterns first
-          if (this.shouldExcludeFile(relativePath)) {
-            console.log(`⚠️  Excluding: ${relativePath}`);
+          if (this.shouldExcludeFile(normalizedRelativePath)) {
+            console.log(`⚠️  Excluding: ${normalizedRelativePath}`);
             continue;
           }
           
@@ -221,16 +222,16 @@ export class PapyrBuilder {
             await walkDirectory(fullPath);
           } else if (entry.isFile()) {
             // Check if file should be included
-            if (this.shouldIncludeFile(relativePath)) {
+            if (this.shouldIncludeFile(normalizedRelativePath)) {
               try {
                 const content = await fs.promises.readFile(fullPath, 'utf-8');
                 const stats = await fs.promises.stat(fullPath);
-                
-                console.log(`✅ Including: ${relativePath}`);
+
+                console.log(`✅ Including: ${normalizedRelativePath}`);
                 files.push({
                   content,
-                  filePath: relativePath,
-                  relativePath,
+                  filePath: normalizedRelativePath,
+                  relativePath: normalizedRelativePath,
                   baseDir: this.config.sourceDir,
                   stats: {
                     size: stats.size,
@@ -242,7 +243,7 @@ export class PapyrBuilder {
                 console.warn(`⚠️  Could not read file ${fullPath}:`, error);
               }
             } else {
-              console.log(`ℹ️  Skipping: ${relativePath} (pattern mismatch)`);
+              console.log(`ℹ️  Skipping: ${normalizedRelativePath} (pattern mismatch)`);
             }
           }
         }
@@ -264,42 +265,51 @@ export class PapyrBuilder {
    * Check if a file should be included based on inclusion patterns
    */
   private shouldIncludeFile(filePath: string): boolean {
+    const normalizedPath = this.normalizeGlobPath(filePath);
     const patterns = this.config.patterns?.include || ['**/*.md'];
-    return patterns.some(pattern => this.matchesPattern(filePath, pattern));
+    return patterns.some(pattern => this.matchesPattern(normalizedPath, pattern));
   }
 
   /**
    * Check if a file should be excluded based on exclusion patterns
    */
   private shouldExcludeFile(filePath: string): boolean {
+    const normalizedPath = this.normalizeGlobPath(filePath);
     const patterns = this.config.patterns?.exclude || [];
-    return patterns.some(pattern => this.matchesPattern(filePath, pattern));
+    return patterns.some(pattern => this.matchesPattern(normalizedPath, pattern));
   }
 
   /**
    * Simple glob pattern matching
    */
   private matchesPattern(filePath: string, pattern: string): boolean {
+    const normalizedPath = this.normalizeGlobPath(filePath);
+    const normalizedPattern = this.normalizeGlobPath(pattern);
+
     // Special handling for common patterns
-    if (pattern === '**/*.md') {
+    if (normalizedPattern === '**/*.md') {
       // This should match any .md file at any level (including root)
-      return filePath.endsWith('.md');
+      return normalizedPath.endsWith('.md');
     }
     
     // Convert glob pattern to regex
     // Handle ** (matches any number of directories including zero)
     // Handle * (matches any characters except path separator)
-    const regexPattern = pattern
+    const regexPattern = normalizedPattern
       .replace(/\./g, '\\.')
       .replace(/\*\*/g, '.*')
       .replace(/\*/g, '[^/]*')
       .replace(/\?/g, '[^/]');
     
     const regex = new RegExp(`^${regexPattern}$`);
-    const matches = regex.test(filePath);
+    const matches = regex.test(normalizedPath);
     
-    console.log(`🔍 Pattern match: "${filePath}" vs "${pattern}" -> ${matches ? '✅' : '❌'} (regex: ${regexPattern})`);
+    console.log(`🔍 Pattern match: "${normalizedPath}" vs "${normalizedPattern}" -> ${matches ? '✅' : '❌'} (regex: ${regexPattern})`);
     return matches;
+  }
+
+  private normalizeGlobPath(input: string): string {
+    return input.replace(/\\/g, '/');
   }
 
   /**

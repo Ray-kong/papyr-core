@@ -17,8 +17,8 @@
   "scripts": {
     "build": "vite build",
     "dev": "vite build --watch",
-    "test": "vitest",
-    "test:coverage": "vitest --coverage",
+    "test": "vitest --run",
+    "test:coverage": "vitest --coverage --run",
     "clean": "rm -rf dist",
     "prepublishOnly": "npm run clean && npm run build"
   },
