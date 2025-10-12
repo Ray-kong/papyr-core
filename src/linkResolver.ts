@@ -35,7 +35,7 @@ export function resolveLinks(notes: ParsedNote[]): Map<string, BacklinkedNote> {
  */
 export function findOrphanedLinks(notes: ParsedNote[]): Map<string, string[]> {
   const orphanedLinks = new Map<string, string[]>()
-  const existingSlugs = new Set(notes.map(note => note.slug))
+  const existingSlugs = new Set<string>(notes.map(note => note.slug))
   
   notes.forEach(note => {
     const orphans = note.linksTo.filter(targetSlug => !existingSlugs.has(targetSlug))
@@ -91,7 +91,7 @@ export function validateLinks(notes: ParsedNote[]): {
   duplicateLinks: number
   linksByNote: Map<string, { valid: number, orphaned: number, self: number, duplicate: number }>
 } {
-  const existingSlugs = new Set(notes.map(note => note.slug))
+  const existingSlugs = new Set<string>(notes.map(note => note.slug))
   let totalLinks = 0
   let validLinks = 0
   let orphanedLinks = 0

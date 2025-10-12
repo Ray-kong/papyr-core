@@ -8,7 +8,7 @@ import {
   type WebReadyExportedData
 } from '../src/jsonExporter.js';
 import { type ProcessingResult, type WebReadyResult } from '../src/fileProcessor.js';
-import { type NoteGraph, type SearchIndex, type WebReadyNote, type ParsedNote } from '../src/types.js';
+import { type NoteGraph, type SearchIndex, type WebReadyNote, type ParsedNote, type Slug } from '../src/types.js';
 
 describe('JsonExporter', () => {
   let mockProcessingResult: ProcessingResult;
@@ -20,13 +20,13 @@ describe('JsonExporter', () => {
     // Mock parsed notes
     const mockParsedNotes: ParsedNote[] = [
       {
-        slug: 'note1',
+        slug: 'note1' as Slug,
         html: '<p>Content of note one</p>',
         metadata: { tags: ['tag1'] },
         linksTo: ['note2']
       },
       {
-        slug: 'note2', 
+        slug: 'note2' as Slug, 
         html: '<p>Content of note two</p>',
         metadata: { tags: ['tag2'] },
         linksTo: []
@@ -36,7 +36,7 @@ describe('JsonExporter', () => {
     // Mock web-ready notes
     const mockWebReadyNotes: WebReadyNote[] = [
       {
-        slug: 'note1',
+        slug: 'note1' as Slug,
         title: 'Note One',
         html: '<p>Content of note one</p>',
         metadata: { tags: ['tag1'] },
@@ -46,7 +46,7 @@ describe('JsonExporter', () => {
         readingTime: 1
       },
       {
-        slug: 'note2',
+        slug: 'note2' as Slug,
         title: 'Note Two',
         html: '<p>Content of note two</p>',
         metadata: { tags: ['tag2'] },

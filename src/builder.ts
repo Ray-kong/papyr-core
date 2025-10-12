@@ -15,6 +15,8 @@ import {
   type AnalyticsResult
 } from './index.js';
 import { AnalyticsEngine } from './analytics.js';
+import { buildFolderHierarchy } from './folderHierarchy.js';
+import { type FolderNode } from './types.js';
 
 /**
  * PapyrBuilder - Automated build pipeline for Papyr projects
@@ -92,12 +94,15 @@ export class PapyrBuilder {
       
       // Collect processing errors
       if (webResult.errors && webResult.errors.length > 0) {
-        buildErrors.push(...webResult.errors.map(err => ({
-          file: err.filePath || 'unknown',
-          error: err.error.message || 'Unknown error',
-          line: undefined,
-          column: undefined
-        })));
+        buildErrors.push(
+          ...webResult.errors.map(err => ({
+            type: 'build' as const,
+            code: 'PLUGIN_ERROR' as const,
+            message: err.error?.message ?? 'Unknown error',
+            file: err.filePath ?? 'unknown',
+            cause: err.error
+          }))
+        );
       }
 
       // Build note graph
@@ -107,6 +112,23 @@ export class PapyrBuilder {
       // Generate search index
       console.log('🔍 Generating search index...');
       const searchIndex = generateSearchIndex(notes);
+
+      // Build folder hierarchy
+      console.log('📁 Building folder hierarchy...');
+      const slugLookup = new Map<string, (typeof notes)[number]['slug']>();
+      webResult.files.forEach(file => {
+        const pathKey = file.relativePath ?? file.filePath;
+        if (!pathKey) {
+          return;
+        }
+        const normalizedPath = pathKey.replace(/\\/g, '/');
+        slugLookup.set(normalizedPath, file.note.slug);
+      });
+      const folderHierarchy = buildFolderHierarchy(
+        sourceFiles,
+        path.basename(this.config.sourceDir),
+        slugLookup
+      );
 
       // Calculate analytics
       console.log('📊 Calculating analytics...');
@@ -134,7 +156,8 @@ export class PapyrBuilder {
         graph,
         searchIndex,
         analytics,
-        buildInfo
+        buildInfo,
+        folderHierarchy
       };
 
       // Output results
@@ -334,6 +357,7 @@ export class PapyrBuilder {
       await this.saveToFile('search-index.json', this.serializeForJSON(result.searchIndex));
       await this.saveToFile('analytics.json', result.analytics);
       await this.saveToFile('build-info.json', result.buildInfo);
+      await this.saveToFile('folder-hierarchy.json', this.serializeFolderHierarchy(result.folderHierarchy));
     }
 
     // Always create combined data file
@@ -342,7 +366,8 @@ export class PapyrBuilder {
       graph: this.serializeForJSON(result.graph),
       searchIndex: this.serializeForJSON(result.searchIndex),
       analytics: result.analytics,
-      buildInfo: result.buildInfo
+      buildInfo: result.buildInfo,
+      folderHierarchy: this.serializeFolderHierarchy(result.folderHierarchy)
     };
 
     await this.saveToFile('papyr-data.json', combinedData);
@@ -376,21 +401,61 @@ export class PapyrBuilder {
   /**
    * Serialize complex objects for JSON output
    */
-  private serializeForJSON(obj: any): any {
-    if (obj instanceof Map) {
-      return Object.fromEntries(
-        Array.from(obj.entries()).map(([key, value]) => [key, this.serializeForJSON(value)])
-      );
-    } else if (obj instanceof Set) {
-      return Array.from(obj).map(value => this.serializeForJSON(value));
-    } else if (obj && typeof obj === 'object') {
-      const result: any = Array.isArray(obj) ? [] : {};
+  private serializeForJSON(obj: any, seen: WeakSet<object> = new WeakSet()): any {
+    if (obj && typeof obj === 'object') {
+      if (seen.has(obj)) {
+        return undefined;
+      }
+      seen.add(obj);
+
+      if (obj instanceof Map) {
+        return Object.fromEntries(
+          Array.from(obj.entries()).map(([key, value]) => [key, this.serializeForJSON(value, seen)])
+        );
+      }
+
+      if (obj instanceof Set) {
+        return Array.from(obj).map(value => this.serializeForJSON(value, seen));
+      }
+
+      if (Array.isArray(obj)) {
+        return obj.map(value => this.serializeForJSON(value, seen));
+      }
+
+      const result: Record<string, any> = {};
       for (const [key, value] of Object.entries(obj)) {
-        result[key] = this.serializeForJSON(value);
+        const serialized = this.serializeForJSON(value, seen);
+        if (serialized !== undefined) {
+          result[key] = serialized;
+        }
       }
       return result;
     }
+
     return obj;
+  }
+
+  private serializeFolderHierarchy(root: FolderNode): any {
+    const seen = new WeakSet<FolderNode>();
+
+    const serializeNode = (node: FolderNode): any => {
+      if (seen.has(node)) {
+        return undefined;
+      }
+      seen.add(node);
+
+      return {
+        name: node.name,
+        path: node.path,
+        depth: node.depth,
+        notes: [...node.notes],
+        children: node.children
+          .map(child => serializeNode(child))
+          .filter((child): child is NonNullable<typeof child> => child !== undefined)
+      };
+    };
+
+    return serializeNode(root);
   }
 
   /**

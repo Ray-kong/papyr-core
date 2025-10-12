@@ -1,10 +1,10 @@
 import { describe, it, expect } from 'vitest'
 import { buildNoteGraph, getBacklinks, getConnections, findShortestPath } from '../src/graph'
-import { ParsedNote } from '../src/types'
+import { ParsedNote, Slug } from '../src/types'
 
 describe('buildNoteGraph', () => {
   const createNote = (slug: string, linksTo: string[] = [], title?: string): ParsedNote => ({
-    slug,
+    slug: slug as Slug,
     html: '',
     metadata: title ? { title } : {},
     linksTo
@@ -147,7 +147,7 @@ describe('buildNoteGraph', () => {
 
 describe('getBacklinks', () => {
   const createNote = (slug: string, linksTo: string[] = []): ParsedNote => ({
-    slug,
+    slug: slug as Slug,
     html: '',
     metadata: {},
     linksTo
@@ -171,7 +171,7 @@ describe('getBacklinks', () => {
 
 describe('getConnections', () => {
   const createNote = (slug: string, linksTo: string[] = []): ParsedNote => ({
-    slug,
+    slug: slug as Slug,
     html: '',
     metadata: {},
     linksTo
@@ -204,7 +204,7 @@ describe('getConnections', () => {
 
 describe('findShortestPath', () => {
   const createNote = (slug: string, linksTo: string[] = []): ParsedNote => ({
-    slug,
+    slug: slug as Slug,
     html: '',
     metadata: {},
     linksTo

@@ -1,4 +1,4 @@
-import { ParsedNote, ParseOptions, WebReadyNote } from './types'
+import { ParsedNote, ParseOptions, WebReadyNote, Slug, Frontmatter, Heading } from './types'
 import matter from 'gray-matter'
 import { unified } from 'unified'
 import remarkParse from 'remark-parse'
@@ -13,7 +13,7 @@ import crypto from 'node:crypto'
 export async function parseMarkdown(md: string, options: ParseOptions = {}): Promise<ParsedNote> {
   // 1. Extract frontmatter using gray-matter with error handling
   let content = md
-  let metadata: Record<string, any> = {}
+  let metadata: Record<string, unknown> = {}
   
   try {
     const parsed = matter(md)
@@ -83,7 +83,7 @@ export async function parseMarkdown(md: string, options: ParseOptions = {}): Pro
   }
   
   // 5. Normalize metadata (convert Date objects to strings)
-  const normalizedMetadata: Record<string, any> = {}
+  const normalizedMetadata: Frontmatter = {}
   for (const [key, value] of Object.entries(metadata)) {
     if (value instanceof Date) {
       normalizedMetadata[key] = value.toISOString().split('T')[0] // YYYY-MM-DD format
@@ -95,13 +95,25 @@ export async function parseMarkdown(md: string, options: ParseOptions = {}): Pro
   // 6. Generate excerpt from first paragraph
   const excerptMatch = content.match(/^(?:[^\n]*\n)*?([^\n#].+?)(?:\n\n|$)/m)
   const excerpt = excerptMatch ? excerptMatch[1].replace(/\[\[.*?\]\]/g, '').trim() : ''
+
+  const filteredLinks = Array.from(linksTo).filter(link => link.length > 0)
+  const collectedHeadings: Heading[] = []
+  const collectedEmbeds: string[] = []
   
+  // Ensure the slug is a string before branding it
+  if (typeof slug !== 'string') {
+    throw new TypeError('Generated slug must be a string')
+  }
+  const typedSlug = slug as Slug
+
   // 7. Return the parsed note
   return {
-    slug,
+    slug: typedSlug,
     html,
     metadata: normalizedMetadata,
-    linksTo: Array.from(linksTo).filter(link => link.length > 0),
+    linksTo: filteredLinks,
+    embeds: collectedEmbeds,
+    headings: collectedHeadings,
     raw: md,
     excerpt: excerpt || undefined
   }
@@ -111,45 +123,107 @@ export async function parseMarkdown(md: string, options: ParseOptions = {}): Pro
  * Convert a ParsedNote to a WebReadyNote with additional web-specific fields
  */
 export function toWebReadyNote(note: ParsedNote): WebReadyNote {
-  // Calculate word count from raw content or HTML
   const textContent = note.raw || note.html.replace(/<[^>]*>/g, '')
   const wordCount = textContent.split(/\s+/).filter(word => word.length > 0).length
-  
-  // Estimate reading time (average reading speed: 200-250 words per minute)
   const readingTime = Math.ceil(wordCount / 225)
-  
-  // Extract tags from metadata
-  const tags = note.metadata?.tags || []
-  const normalizedTags = Array.isArray(tags) ? tags : [tags].filter(Boolean)
-  
-  // Generate title from metadata or slug
-  const title = note.metadata?.title || note.slug.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
-  
-  // Generate description from excerpt or first paragraph
-  const description = note.excerpt || note.metadata?.description || 
-    textContent.substring(0, 160).replace(/\n/g, ' ').trim()
-  
-  // Extract keywords from tags and metadata
-  const keywords = [
+
+  const metadata = note.metadata ?? {}
+  const metadataRecord = metadata as Record<string, unknown>
+
+  const normalizedTags = normalizeStringArray(metadata.tags)
+  const metadataKeywords = normalizeStringArray(metadataRecord['keywords'])
+  const metadataCategories = normalizeStringArray(metadataRecord['categories'])
+
+  const title = typeof metadata.title === 'string' && metadata.title.length > 0
+    ? metadata.title
+    : titleFromSlug(note.slug)
+
+  const excerptText = note.excerpt && note.excerpt.length > 0 ? note.excerpt : undefined
+  const metadataDescription = firstString(
+    metadataRecord['description'],
+    metadataRecord['summary']
+  )
+  const fallbackDescription = textContent.substring(0, 160).replace(/\n/g, ' ').trim()
+  const description = metadataDescription ?? excerptText ?? fallbackDescription
+
+  const keywordSet = new Set<string>([
     ...normalizedTags,
-    ...(note.metadata?.keywords || []),
-    ...(note.metadata?.categories || [])
-  ].filter(Boolean)
-  
+    ...metadataKeywords,
+    ...metadataCategories
+  ].filter(tag => tag.length > 0))
+
+  const createdAt = firstString(
+    metadataRecord['createdAt'],
+    metadataRecord['date'],
+    metadata.created
+  )
+
+  const updatedAt = firstString(
+    metadataRecord['updatedAt'],
+    metadataRecord['modified'],
+    metadataRecord['lastModified'],
+    metadata.updated
+  )
+
+  const ogImage = firstString(
+    metadataRecord['ogImage'],
+    metadataRecord['image'],
+    metadataRecord['cover']
+  )
+
   return {
     slug: note.slug,
     html: note.html,
     metadata: note.metadata,
     linksTo: note.linksTo,
+    embeds: note.embeds,
+    headings: note.headings,
     excerpt: note.excerpt,
     title,
     tags: normalizedTags,
-    createdAt: note.metadata?.createdAt || note.metadata?.date || note.metadata?.created,
-    updatedAt: note.metadata?.updatedAt || note.metadata?.modified || note.metadata?.lastModified,
+    createdAt,
+    updatedAt,
     readingTime,
     wordCount,
     description,
-    keywords,
-    ogImage: note.metadata?.ogImage || note.metadata?.image || note.metadata?.cover
+    keywords: Array.from(keywordSet),
+    ogImage
   }
+}
+
+function normalizeStringArray(value: unknown): string[] {
+  if (!value) {
+    return []
+  }
+
+  if (Array.isArray(value)) {
+    return value
+      .map(item => (typeof item === 'string' ? item : String(item ?? '')).trim())
+      .filter(item => item.length > 0)
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    return trimmed.length > 0 ? [trimmed] : []
+  }
+
+  return []
+}
+
+function firstString(...values: unknown[]): string | undefined {
+  for (const value of values) {
+    if (typeof value === 'string') {
+      const trimmed = value.trim()
+      if (trimmed.length > 0) {
+        return trimmed
+      }
+    }
+  }
+  return undefined
+}
+
+function titleFromSlug(slug: Slug): string {
+  return String(slug)
+    .replace(/-/g, ' ')
+    .replace(/\b\w/g, char => char.toUpperCase())
 }

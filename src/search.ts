@@ -5,7 +5,10 @@ import {
   SearchResult, 
   SearchOptions, 
   IndexOptions,
-  SearchBoost 
+  SearchBoost,
+  SearchRecord,
+  Slug,
+  Frontmatter
 } from './types'
 
 /**
@@ -31,7 +34,7 @@ export function generateSearchIndex(
     preset: preset as any,
     tokenize: tokenize as any,
     resolution,
-    context: { depth },
+    context: { depth, resolution, bidirectional: false },
     document: {
       id: 'slug',
       index: [
@@ -44,31 +47,19 @@ export function generateSearchIndex(
   })
 
   // Create document map for quick lookup
-  const documents = new Map<string, ParsedNote>()
+  const documents = new Map<Slug, ParsedNote>()
 
   // Index all notes
   notes.forEach(note => {
-    // Extract title from metadata or use slug as fallback
-    const title = note.metadata?.title || note.slug
-
-    // Extract tags from metadata
-    const tags = note.metadata?.tags ? 
-      (Array.isArray(note.metadata.tags) ? note.metadata.tags : [note.metadata.tags]).join(' ') 
-      : ''
-
-    // Create searchable metadata string
-    const metadataText = Object.entries(note.metadata || {})
-      .filter(([key, value]) => key !== 'title' && key !== 'tags' && typeof value === 'string')
-      .map(([_, value]) => value)
-      .join(' ')
+    const record = createSearchRecord(note)
 
     // Add to FlexSearch index
     index.add({
-      slug: note.slug,
-      title,
-      content: note.raw || note.html.replace(/<[^>]*>/g, ''), // Use raw markdown or strip HTML
-      tags,
-      metadata: metadataText
+      slug: record.slug,
+      title: record.title,
+      content: record.content,
+      tags: record.tags.join(' '),
+      metadata: metadataToSearchText(record.metadata)
     })
 
     // Store in document map
@@ -120,20 +111,22 @@ export function searchNotes(
     const fieldBoost = boost[field as keyof SearchBoost] || 1
 
     fieldResult.result.forEach((slug: string) => {
-      const note = searchIndex.documents.get(slug)
+      const typedSlug = slug as Slug
+      const note = searchIndex.documents.get(typedSlug)
       if (!note) return
+
+      const record = createSearchRecord(note)
 
       // Filter by tags if specified
       if (tags && tags.length > 0) {
-        const noteTags = note.metadata?.tags || []
-        const noteTagsArray = Array.isArray(noteTags) ? noteTags : [noteTags]
+        const noteTagsArray = record.tags
         if (!tags.some(tag => noteTagsArray.includes(tag))) {
           return
         }
       }
 
       // Check if we already have this result
-      const existingResult = processedResults.find(r => r.slug === slug)
+      const existingResult = processedResults.find(r => r.slug === typedSlug)
       
       if (existingResult) {
         // Update score and matched fields
@@ -143,13 +136,11 @@ export function searchNotes(
         }
       } else {
         // Create new result
-        const title = note.metadata?.title || note.slug
-        const excerpt = note.excerpt || 
-          (note.raw ? note.raw.substring(0, 200) + '...' : 
-           note.html.replace(/<[^>]*>/g, '').substring(0, 200) + '...')
+        const title = record.title
+        const excerpt = record.excerpt ?? buildExcerpt(record.content)
 
         const result: SearchResult = {
-          slug,
+          slug: typedSlug,
           title,
           excerpt,
           score: fieldBoost,
@@ -158,7 +149,7 @@ export function searchNotes(
 
         // Add highlights if requested
         if (highlight) {
-          result.highlights = generateHighlights(query, note, field)
+          result.highlights = generateHighlights(query, record, field)
         }
 
         processedResults.push(result)
@@ -179,21 +170,14 @@ export function searchNotes(
  * @param searchIndex The search index to update
  */
 export function addNoteToIndex(note: ParsedNote, searchIndex: SearchIndex): void {
-  const title = note.metadata?.title || note.slug
-  const tags = note.metadata?.tags ? 
-    (Array.isArray(note.metadata.tags) ? note.metadata.tags : [note.metadata.tags]).join(' ') 
-    : ''
-  const metadataText = Object.entries(note.metadata || {})
-    .filter(([key, value]) => key !== 'title' && key !== 'tags' && typeof value === 'string')
-    .map(([_, value]) => value)
-    .join(' ')
+  const record = createSearchRecord(note)
 
   searchIndex.index.add({
-    slug: note.slug,
-    title,
-    content: note.raw || note.html.replace(/<[^>]*>/g, ''),
-    tags,
-    metadata: metadataText
+    slug: record.slug,
+    title: record.title,
+    content: record.content,
+    tags: record.tags.join(' '),
+    metadata: metadataToSearchText(record.metadata)
   })
 
   searchIndex.documents.set(note.slug, note)
@@ -204,9 +188,9 @@ export function addNoteToIndex(note: ParsedNote, searchIndex: SearchIndex): void
  * @param slug The slug of the note to remove
  * @param searchIndex The search index to update
  */
-export function removeNoteFromIndex(slug: string, searchIndex: SearchIndex): void {
+export function removeNoteFromIndex(slug: Slug | string, searchIndex: SearchIndex): void {
   searchIndex.index.remove(slug)
-  searchIndex.documents.delete(slug)
+  searchIndex.documents.delete(slug as Slug)
 }
 
 /**
@@ -228,7 +212,7 @@ export function updateNoteInIndex(note: ParsedNote, searchIndex: SearchIndex): v
  * @param field The field that matched
  * @returns Array of highlight objects
  */
-function generateHighlights(query: string, note: ParsedNote, field: string): any[] {
+function generateHighlights(query: string, record: SearchRecord, field: string): any[] {
   // This is a simplified highlight implementation
   // In a production system, you might want more sophisticated highlighting
   const highlights: any[] = []
@@ -236,21 +220,16 @@ function generateHighlights(query: string, note: ParsedNote, field: string): any
   let content = ''
   switch (field) {
     case 'title':
-      content = note.metadata?.title || note.slug
+      content = record.title || String(record.slug)
       break
     case 'content':
-      content = note.raw || note.html.replace(/<[^>]*>/g, '')
+      content = record.content
       break
     case 'tags':
-      content = note.metadata?.tags ? 
-        (Array.isArray(note.metadata.tags) ? note.metadata.tags : [note.metadata.tags]).join(' ') 
-        : ''
+      content = record.tags.join(' ')
       break
     case 'metadata':
-      content = Object.entries(note.metadata || {})
-        .filter(([key, value]) => key !== 'title' && key !== 'tags' && typeof value === 'string')
-        .map(([_, value]) => value)
-        .join(' ')
+      content = metadataToSearchText(record.metadata)
       break
   }
 
@@ -276,6 +255,96 @@ function generateHighlights(query: string, note: ParsedNote, field: string): any
   })
 
   return highlights
+}
+
+/**
+ * Build a search-ready document record from a parsed note
+ */
+export function createSearchRecord(note: ParsedNote): SearchRecord {
+  const metadata = (note.metadata ?? {}) as Frontmatter
+  const tags = normalizeTags((metadata as any).tags)
+  const content = note.raw || note.html.replace(/<[^>]*>/g, '')
+  const excerpt = note.excerpt || buildExcerpt(content)
+
+  return {
+    slug: note.slug as Slug,
+    title: typeof metadata.title === 'string' && metadata.title.length > 0 ? metadata.title : note.slug,
+    content,
+    tags,
+    metadata,
+    excerpt
+  }
+}
+
+/**
+ * Normalize tag values from frontmatter into a string array
+ */
+function normalizeTags(rawTags: unknown): string[] {
+  if (!rawTags) {
+    return []
+  }
+
+  if (Array.isArray(rawTags)) {
+    return rawTags
+      .map(tag => (typeof tag === 'string' ? tag : String(tag)))
+      .filter(tag => tag.length > 0)
+  }
+
+  if (typeof rawTags === 'string') {
+    return rawTags.length > 0 ? [rawTags] : []
+  }
+
+  return [String(rawTags)]
+}
+
+/**
+ * Convert metadata values into a search-friendly string
+ */
+function metadataToSearchText(metadata: Frontmatter): string {
+  const excludeKeys = new Set(['title', 'tags'])
+  const values: string[] = []
+
+  for (const [key, value] of Object.entries(metadata || {})) {
+    if (excludeKeys.has(key)) {
+      continue
+    }
+    values.push(...collectTextValues(value))
+  }
+
+  return values.join(' ')
+}
+
+function collectTextValues(value: unknown): string[] {
+  if (typeof value === 'string') {
+    return [value]
+  }
+
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return [String(value)]
+  }
+
+  if (Array.isArray(value)) {
+    return value.flatMap(collectTextValues)
+  }
+
+  if (value && typeof value === 'object') {
+    return Object.values(value as Record<string, unknown>).flatMap(collectTextValues)
+  }
+
+  return []
+}
+
+function buildExcerpt(content: string, length: number = 200): string {
+  if (!content) {
+    return ''
+  }
+
+  const trimmed = content.trim()
+  if (trimmed.length <= length) {
+    return trimmed
+  }
+
+  return `${trimmed.substring(0, length)}...`
 }
 
 /**

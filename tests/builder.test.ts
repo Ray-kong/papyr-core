@@ -470,6 +470,25 @@ describe('PapyrBuilder', () => {
         primitive: 'test'
       });
     });
+
+    it('should omit parent references to prevent circular serialization', () => {
+      const config: BuildConfig = {
+        sourceDir,
+        outputDir
+      };
+
+      const builder = new PapyrBuilder(config);
+      const serializeForJSON = (builder as any).serializeForJSON.bind(builder);
+
+      const root: any = { name: 'root', children: [] };
+      const child: any = { name: 'child', children: [], parent: root };
+      root.children.push(child);
+
+      const result = serializeForJSON(root);
+      expect(result.children).toHaveLength(1);
+      expect(result.children[0].name).toBe('child');
+      expect(result.children[0].parent).toBeUndefined();
+    });
   });
 
   describe('Watch Functionality', () => {

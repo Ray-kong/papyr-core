@@ -7,7 +7,7 @@ import {
   updateNoteInIndex,
   getSearchSuggestions
 } from '../src/search'
-import { ParsedNote, SearchIndex } from '../src/types'
+import { ParsedNote, SearchIndex, Slug } from '../src/types'
 
 describe('search', () => {
   const createNote = (
@@ -17,7 +17,7 @@ describe('search', () => {
     tags?: string[],
     metadata?: Record<string, any>
   ): ParsedNote => ({
-    slug,
+    slug: slug as Slug,
     html: `<p>${content || 'Default content'}</p>`,
     metadata: {
       title,
@@ -238,7 +238,7 @@ describe('search', () => {
 
     it('should handle notes without optional fields', () => {
       const minimalNote: ParsedNote = {
-        slug: 'minimal',
+        slug: 'minimal' as Slug,
         html: '<p>Minimal</p>',
         metadata: {},
         linksTo: []
@@ -371,7 +371,7 @@ describe('search', () => {
 
     it('should handle notes with HTML in content', () => {
       const htmlNote: ParsedNote = {
-        slug: 'html-note',
+        slug: 'html-note' as Slug,
         html: '<h1>Title</h1><p>Paragraph with <strong>bold</strong> text</p>',
         metadata: { title: 'HTML Note' },
         linksTo: [],

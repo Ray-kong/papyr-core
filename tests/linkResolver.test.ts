@@ -6,11 +6,11 @@ import {
   validateLinks,
   getReachableNotes
 } from '../src/linkResolver'
-import { ParsedNote } from '../src/types'
+import { ParsedNote, Slug } from '../src/types'
 
 describe('linkResolver', () => {
   const createNote = (slug: string, linksTo: string[] = []): ParsedNote => ({
-    slug,
+    slug: slug as Slug,
     html: '',
     metadata: {},
     linksTo
@@ -45,7 +45,7 @@ describe('linkResolver', () => {
 
     it('should preserve all original note properties', () => {
       const notes: ParsedNote[] = [{
-        slug: 'test',
+        slug: 'test' as Slug,
         html: '<p>Test</p>',
         metadata: { title: 'Test Note' },
         linksTo: ['other'],

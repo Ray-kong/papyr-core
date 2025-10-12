@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { AnalyticsEngine } from '../src/analytics.js';
-import { type WebReadyNote, type NoteGraph, type GraphNode } from '../src/types.js';
+import { type WebReadyNote, type NoteGraph, type GraphNode, type Slug } from '../src/types.js';
 
 const createWebReadyNote = (options: {
   slug: string
@@ -21,10 +21,12 @@ const createWebReadyNote = (options: {
     metadata = {}
   } = options;
 
+  const typedSlug = slug as Slug;
+
   return {
-    slug,
+    slug: typedSlug,
     title,
-    html: `<p>${slug}</p>`,
+    html: `<p>${typedSlug}</p>`,
     metadata,
     linksTo,
     tags,
@@ -162,7 +164,7 @@ describe('AnalyticsEngine', () => {
     
     mockNotes = [
       {
-        slug: 'note1',
+        slug: 'note1' as Slug,
         title: 'Note One',
         html: '<p>Content</p>',
         metadata: { tags: ['tag1'] },

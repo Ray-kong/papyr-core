@@ -1,11 +1,89 @@
-// Base interface for core processing
-export interface ParsedNote {
+// ===========================
+// Branded Domain Types
+// ===========================
+// These provide type safety for string-based identifiers
+
+/** Unique identifier for a note */
+export type NoteId = string & { readonly __brand: 'NoteId' }
+
+/** URL-safe slug derived from note filename */
+export type Slug = string & { readonly __brand: 'Slug' }
+
+/** Absolute or relative path to a vault location */
+export type VaultPath = string & { readonly __brand: 'VaultPath' }
+
+/** YAML frontmatter metadata */
+export interface Frontmatter {
+  [key: string]: unknown
+  title?: string
+  tags?: string[]
+  aliases?: string[]
+  created?: string
+  updated?: string
+  published?: boolean
+}
+
+/** Note metadata extracted from frontmatter and content */
+export interface NoteMeta {
+  title: string
+  tags: string[]
+  aliases: string[]
+  created?: Date
+  updated?: Date
+  wordCount?: number
+  readingTime?: number
+}
+
+// ===========================
+// AST & Content Structure
+// ===========================
+
+/** Markdown AST node (using unified/remark structure) */
+export interface ASTNode {
+  type: string
+  children?: ASTNode[]
+  value?: string
+  [key: string]: any
+}
+
+/** Heading structure extracted from markdown */
+export interface Heading {
+  level: 1 | 2 | 3 | 4 | 5 | 6
+  text: string
   slug: string
+  line?: number
+}
+
+/** Link reference within a note */
+export interface LinkReference {
+  type: 'wiki' | 'markdown' | 'embed'
+  target: string
+  alias?: string
+  line?: number
+}
+
+/** Embedded content reference (transclusions) */
+export interface EmbedReference extends LinkReference {
+  type: 'embed'
+  blockId?: string
+  heading?: string
+}
+
+// ===========================
+// Core Note Types
+// ===========================
+
+/** Base interface for core processing */
+export interface ParsedNote {
+  slug: Slug
   html: string
-  metadata: Record<string, any>
+  metadata: Frontmatter
   linksTo: string[]
+  embeds: string[]
+  headings: Heading[]
   raw?: string
   excerpt?: string
+  ast?: ASTNode
 }
 
 // Extended interface for web applications
@@ -58,20 +136,52 @@ export interface GraphOptions {
   minimumConnections?: number  // minimum connections to include node
 }
 
-// Search-related types
-export interface SearchIndex {
-  index: any  // FlexSearch index instance
-  documents: Map<string, ParsedNote>  // slug -> note mapping for result lookup
+// ===========================
+// Folder & Tree Structure
+// ===========================
+
+/** Folder node for hierarchical vault navigation */
+export interface FolderNode {
+  name: string
+  path: VaultPath
+  children: FolderNode[]
+  notes: Slug[]
+  parent?: FolderNode
+  depth: number
 }
 
-export interface SearchResult {
-  slug: string
+// ===========================
+// Search-related types
+// ===========================
+
+/** Search index with FlexSearch and document store */
+export interface SearchIndex {
+  index: any  // FlexSearch index instance
+  documents: Map<Slug, ParsedNote>  // slug -> original note mapping
+}
+
+/** Indexed document record for search processing */
+export interface SearchRecord {
+  slug: Slug
+  title: string
+  content: string
+  tags: string[]
+  metadata: Frontmatter
+  excerpt?: string
+}
+
+/** Individual search result hit */
+export interface SearchHit {
+  slug: Slug
   title: string
   excerpt: string
   score: number
   highlights?: SearchHighlight[]
   matchedFields: string[]  // which fields matched the query
 }
+
+/** @deprecated Use SearchHit instead */
+export interface SearchResult extends SearchHit {}
 
 export interface SearchHighlight {
   field: string  // 'title', 'content', 'metadata', etc.
@@ -103,7 +213,245 @@ export interface IndexOptions {
   preset?: 'memory' | 'speed' | 'match' | 'score' | 'default'
 }
 
+// ===========================
+// Configuration Types
+// ===========================
+
+/** Main Papyr library configuration */
+export interface PapyrConfig {
+  /** Base path for link resolution */
+  basePath?: string
+  
+  /** Link resolution strategy */
+  linkResolver?: LinkResolverConfig
+  
+  /** HTML sanitization options */
+  sanitize?: SanitizeConfig
+  
+  /** Theme and component customization */
+  theme?: ThemeConfig
+  
+  /** Plugin system configuration */
+  plugins?: PluginConfig[]
+  
+  /** Obsidian compatibility options */
+  obsidian?: ObsidianCompatOptions
+}
+
+/** Link resolution configuration */
+export interface LinkResolverConfig {
+  /** Strategy for resolving wiki links */
+  strategy: 'shortest' | 'relative' | 'absolute'
+  
+  /** Case sensitivity for link matching */
+  caseSensitive?: boolean
+  
+  /** Handle broken links */
+  onBrokenLink?: 'ignore' | 'warn' | 'error'
+  
+  /** Custom link transformer */
+  transform?: (target: string) => string
+}
+
+/** HTML sanitization configuration */
+export interface SanitizeConfig {
+  /** Enable/disable sanitization */
+  enabled?: boolean
+  
+  /** Allowed HTML tags */
+  allowedTags?: string[]
+  
+  /** Allowed attributes */
+  allowedAttributes?: Record<string, string[]>
+  
+  /** Allow class names */
+  allowedClasses?: Record<string, string[]>
+}
+
+/** Theme configuration */
+export interface ThemeConfig {
+  /** Color scheme */
+  mode?: 'light' | 'dark' | 'auto'
+  
+  /** Custom CSS classes */
+  customClasses?: Record<string, string>
+  
+  /** Component overrides */
+  components?: Record<string, any>
+}
+
+/** Plugin configuration */
+export interface PluginConfig {
+  /** Plugin name/identifier */
+  name: string
+  
+  /** Plugin options */
+  options?: Record<string, unknown>
+  
+  /** Enable/disable plugin */
+  enabled?: boolean
+}
+
+/** Obsidian-specific compatibility options */
+export interface ObsidianCompatOptions {
+  /** Enable wiki-style links [[target]] */
+  wikilinks?: boolean | WikilinkOptions
+  
+  /** Enable transclusions/embeds ![[target]] */
+  transclusions?: boolean | TransclusionOptions
+  
+  /** Enable callout blocks */
+  callouts?: boolean | CalloutOptions
+  
+  /** Tag prefix character (default: #) */
+  tagPrefix?: string
+  
+  /** Enable dataview-style inline fields */
+  dataview?: boolean
+  
+  /** Enable block references ^block-id */
+  blockReferences?: boolean
+}
+
+/** Wiki link parsing options */
+export interface WikilinkOptions {
+  /** Parse aliases [[target|alias]] */
+  parseAliases?: boolean
+  
+  /** Parse heading references [[target#heading]] */
+  parseHeadings?: boolean
+  
+  /** Parse block references [[target^block]] */
+  parseBlocks?: boolean
+}
+
+/** Transclusion/embed options */
+export interface TransclusionOptions {
+  /** Allow heading embeds ![[note#heading]] */
+  allowHeadings?: boolean
+  
+  /** Allow block embeds ![[note^block]] */
+  allowBlocks?: boolean
+  
+  /** Max nesting depth to prevent infinite loops */
+  maxDepth?: number
+}
+
+/** Callout block options */
+export interface CalloutOptions {
+  /** Supported callout types */
+  types?: string[]
+  
+  /** Allow foldable callouts */
+  foldable?: boolean
+  
+  /** Custom callout renderer */
+  renderer?: (type: string, content: string) => string
+}
+
+// ===========================
+// Error Types
+// ===========================
+
+/** Discriminated union of all Papyr errors */
+export type PapyrError = 
+  | ParseError
+  | LinkError
+  | BuildError
+  | ValidationError
+
+/** Parser-related errors */
+export interface ParseError {
+  type: 'parse'
+  code: 
+    | 'INVALID_FRONTMATTER'
+    | 'MALFORMED_MARKDOWN'
+    | 'INVALID_YAML'
+    | 'ENCODING_ERROR'
+  message: string
+  file: string
+  line?: number
+  column?: number
+  context?: string
+}
+
+/** Link resolution errors */
+export interface LinkError {
+  type: 'link'
+  code:
+    | 'UNRESOLVED_LINK'
+    | 'CIRCULAR_EMBED'
+    | 'EMBED_DEPTH_EXCEEDED'
+    | 'INVALID_LINK_FORMAT'
+    | 'AMBIGUOUS_LINK'
+  message: string
+  source: string
+  target: string
+  suggestions?: string[]
+}
+
+/** Build process errors */
+export interface BuildError {
+  type: 'build'
+  code:
+    | 'FILE_NOT_FOUND'
+    | 'PERMISSION_DENIED'
+    | 'INVALID_CONFIG'
+    | 'OUTPUT_WRITE_FAILED'
+    | 'PLUGIN_ERROR'
+  message: string
+  file?: string
+  plugin?: string
+  cause?: Error
+}
+
+/** Validation errors */
+export interface ValidationError {
+  type: 'validation'
+  code:
+    | 'INVALID_SLUG'
+    | 'DUPLICATE_SLUG'
+    | 'INVALID_PATH'
+    | 'MISSING_REQUIRED_FIELD'
+  message: string
+  field?: string
+  value?: unknown
+}
+
+/** Error catalog for reference */
+export const ERROR_MESSAGES = {
+  // Parse errors
+  INVALID_FRONTMATTER: 'Invalid YAML frontmatter syntax',
+  MALFORMED_MARKDOWN: 'Malformed markdown structure',
+  INVALID_YAML: 'YAML parsing failed',
+  ENCODING_ERROR: 'File encoding not supported',
+  
+  // Link errors
+  UNRESOLVED_LINK: 'Could not resolve link target',
+  CIRCULAR_EMBED: 'Circular embed reference detected',
+  EMBED_DEPTH_EXCEEDED: 'Maximum embed depth exceeded',
+  INVALID_LINK_FORMAT: 'Invalid link format',
+  AMBIGUOUS_LINK: 'Multiple targets match this link',
+  
+  // Build errors
+  FILE_NOT_FOUND: 'File not found',
+  PERMISSION_DENIED: 'Permission denied',
+  INVALID_CONFIG: 'Invalid configuration',
+  OUTPUT_WRITE_FAILED: 'Failed to write output',
+  PLUGIN_ERROR: 'Plugin error',
+  
+  // Validation errors
+  INVALID_SLUG: 'Invalid slug format',
+  DUPLICATE_SLUG: 'Duplicate slug detected',
+  INVALID_PATH: 'Invalid file path',
+  MISSING_REQUIRED_FIELD: 'Required field is missing',
+} as const
+
+// ===========================
 // Builder-related types
+// ===========================
+
+/** Build configuration (legacy - consider using PapyrConfig) */
 export interface BuildConfig {
   sourceDir: string
   outputDir: string
@@ -143,6 +491,7 @@ export interface BuildResult {
   searchIndex: SearchIndex
   analytics: AnalyticsResult
   buildInfo: BuildInfo
+  folderHierarchy: FolderNode
 }
 
 export interface BuildInfo {
@@ -154,15 +503,8 @@ export interface BuildInfo {
     totalFiles: number
     processedFiles: number
     skippedFiles: number
-    errors: BuildError[]
+    errors: PapyrError[]
   }
-}
-
-export interface BuildError {
-  file: string
-  error: string
-  line?: number
-  column?: number
 }
 
 // Analytics-related types

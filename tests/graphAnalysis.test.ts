@@ -11,11 +11,11 @@ import {
   findAuthorities,
   getNeighborhood
 } from '../src/graphAnalysis'
-import { ParsedNote } from '../src/types'
+import { ParsedNote, Slug } from '../src/types'
 
 describe('graphAnalysis', () => {
   const createNote = (slug: string, linksTo: string[] = [], title?: string): ParsedNote => ({
-    slug,
+    slug: slug as Slug,
     html: '',
     metadata: title ? { title } : {},
     linksTo

@@ -1,6 +1,7 @@
 import { ProcessingResult, WebReadyResult } from './fileProcessor'
 import { NoteGraph, SearchIndex } from './types'
 import { getGraphStatistics } from './graphAnalysis'
+import { createSearchRecord } from './search'
 
 export interface ExportOptions {
   pretty?: boolean
@@ -76,12 +77,17 @@ function serializeGraph(graph: NoteGraph): any {
 }
 
 function serializeSearchIndex(searchIndex: SearchIndex): any {
-  const documents = Array.from(searchIndex.documents.entries()).map(([slug, note]) => ({
-    slug,
-    title: note.metadata?.title || slug,
-    excerpt: note.excerpt,
-    tags: note.metadata?.tags || []
-  }))
+  const documents = Array.from(searchIndex.documents.entries()).map(([slug, note]) => {
+    const record = createSearchRecord(note)
+
+    return {
+      slug,
+      title: record.title,
+      excerpt: record.excerpt,
+      tags: record.tags,
+      metadata: record.metadata
+    }
+  })
   
   return {
     documents,

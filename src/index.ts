@@ -62,6 +62,15 @@ export {
   type WebReadyExportedData
 } from './jsonExporter'
 
+// Folder hierarchy
+export {
+  buildFolderHierarchy,
+  calculateFolderStats,
+  findFolderByPath,
+  getAllNotesInFolder,
+  type FolderStats
+} from './folderHierarchy'
+
 // Build automation and analytics
 export { PapyrBuilder } from './builder'
 export { AnalyticsEngine } from './analytics' 
