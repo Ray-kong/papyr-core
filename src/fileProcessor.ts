@@ -1,6 +1,34 @@
 import { ParsedNote, WebReadyNote } from './types'
 import { parseMarkdown, toWebReadyNote } from './parseMarkdown'
 
+function computeRelativePath(filePath: string, baseDir: string): string {
+  const normalizedFile = filePath
+    .replace(/\\/g, '/')
+    .replace(/\/+/g, '/')
+  const normalizedBase = baseDir
+    .replace(/\\/g, '/')
+    .replace(/\/+/g, '/')
+    .replace(/\/+$/, '')
+
+  if (!normalizedBase) {
+    return normalizedFile.replace(/^\/+/, '')
+  }
+
+  if (normalizedFile === normalizedBase) {
+    return ''
+  }
+
+  if (normalizedFile.startsWith(`${normalizedBase}/`)) {
+    return normalizedFile.slice(normalizedBase.length + 1)
+  }
+
+  if (normalizedFile.startsWith(normalizedBase)) {
+    return normalizedFile.slice(normalizedBase.length).replace(/^\/+/, '')
+  }
+
+  return normalizedFile.replace(/^\/+/, '')
+}
+
 export interface ProcessedFile {
   filePath: string
   relativePath: string
@@ -42,7 +70,7 @@ export async function processMarkdownContent(
   baseDir: string
 ): Promise<ProcessedFile> {
   const note = await parseMarkdown(content, { path: filePath })
-  const relativePath = filePath.replace(baseDir, '').replace(/^\//, '')
+  const relativePath = computeRelativePath(filePath, baseDir)
   
   return {
     filePath,
@@ -61,7 +89,7 @@ export async function processMarkdownContentToWeb(
 ): Promise<WebReadyFile> {
   const note = await parseMarkdown(content, { path: filePath })
   const webReadyNote = toWebReadyNote(note)
-  const relativePath = filePath.replace(baseDir, '').replace(/^\//, '')
+  const relativePath = computeRelativePath(filePath, baseDir)
   
   return {
     filePath,
