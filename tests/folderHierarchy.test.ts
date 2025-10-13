@@ -250,6 +250,44 @@ describe('buildFolderHierarchy', () => {
     expect(folder.parent).toBe(hierarchy)
     expect(subfolder.parent).toBe(folder)
   })
+
+  it('should resolve slugs using lookup map and object inputs', () => {
+    const files: SourceFile[] = [
+      {
+        content: '',
+        filePath: 'docs/intro.md',
+        relativePath: 'docs/intro.md',
+        baseDir: '/vault'
+      },
+      {
+        content: '',
+        filePath: 'docs/guide.md',
+        relativePath: './docs/guide.md',
+        baseDir: '/vault'
+      },
+      {
+        content: '',
+        filePath: 'docs/tutorial.md',
+        relativePath: 'docs\\tutorial.md',
+        baseDir: '/vault'
+      }
+    ]
+
+    const mapLookup = new Map<string, Slug>([
+      ['docs/intro.md', 'intro-slug' as Slug]
+    ])
+    const objectLookup: Record<string, Slug> = {
+      './docs/guide.md': 'guide-slug' as Slug
+    }
+
+    const hierarchyFromMap = buildFolderHierarchy(files.slice(0, 2), 'root', mapLookup)
+    const docsFolderFromMap = hierarchyFromMap.children.find(f => f.name === 'docs')
+    expect(docsFolderFromMap?.notes).toEqual(['guide', 'intro-slug'] as Slug[])
+
+    const hierarchyFromObject = buildFolderHierarchy(files, 'root', objectLookup)
+    const docsFolderFromObject = hierarchyFromObject.children.find(f => f.name === 'docs')
+    expect(docsFolderFromObject?.notes).toEqual(['guide-slug', 'intro', 'tutorial'] as Slug[])
+  })
 })
 
 describe('calculateFolderStats', () => {

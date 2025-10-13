@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { parseMarkdown } from '../src/parseMarkdown'
+import { parseMarkdown, toWebReadyNote } from '../src/parseMarkdown'
+import { Slug } from '../src/types'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
@@ -446,4 +447,62 @@ Content continues...`
       expect(result.html).toContain('Content continues')
     })
   })
-}) 
+})
+
+describe('toWebReadyNote', () => {
+  it('should derive enriched fields from metadata, excerpt, and raw content', () => {
+    const note = {
+      slug: 'enriched-note' as Slug,
+      html: '<p>This is <strong>rich</strong> content.</p>',
+      metadata: {
+        title: 'Enriched Note',
+        tags: [' tag-one ', 42, null],
+        keywords: 'Alpha Keyword ',
+        categories: { ignored: true },
+        description: 'Explicit description',
+        createdAt: '2024-01-01',
+        updatedAt: '2024-02-01',
+        ogImage: 'cover.png'
+      },
+      linksTo: ['ref-one'],
+      embeds: [],
+      headings: [],
+      raw: 'This is rich content with several meaningful words for reading time calculation.',
+      excerpt: 'Custom excerpt'
+    }
+
+    const webNote = toWebReadyNote(note)
+
+    expect(webNote.title).toBe('Enriched Note')
+    expect(webNote.tags).toEqual(['tag-one', '42'])
+    expect(webNote.description).toBe('Explicit description')
+    expect(webNote.createdAt).toBe('2024-01-01')
+    expect(webNote.updatedAt).toBe('2024-02-01')
+    expect(webNote.ogImage).toBe('cover.png')
+    expect(webNote.keywords).toEqual(expect.arrayContaining(['Alpha Keyword', 'tag-one', '42']))
+    expect(webNote.readingTime).toBe(1)
+    expect(webNote.wordCount).toBeGreaterThan(0)
+  })
+
+  it('should fall back to slug-derived title and text-based description when metadata is sparse', () => {
+    const note = {
+      slug: 'sparse-note' as Slug,
+      html: '<p>Plain text body without raw override.</p>',
+      metadata: {},
+      linksTo: [],
+      embeds: [],
+      headings: [],
+      raw: undefined,
+      excerpt: ''
+    }
+
+    const webNote = toWebReadyNote(note)
+
+    expect(webNote.title).toBe('Sparse Note')
+    expect(webNote.tags).toEqual([])
+    expect(webNote.description).toBe('Plain text body without raw override.')
+    expect(webNote.createdAt).toBeUndefined()
+    expect(webNote.updatedAt).toBeUndefined()
+    expect(webNote.keywords).toEqual([])
+  })
+})

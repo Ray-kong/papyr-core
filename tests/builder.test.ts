@@ -339,6 +339,58 @@ describe('PapyrBuilder', () => {
 
       errorSpy.mockRestore();
     });
+
+    it('should ignore web files without path metadata when building folder hierarchy', async () => {
+      await fs.promises.writeFile(
+        path.join(sourceDir, 'note1.md'),
+        '# Note 1\n\nContent.'
+      );
+
+      const {
+        processMarkdownContentsToWeb,
+        buildNoteGraph,
+        generateSearchIndex
+      } = await import('../src/index.js');
+      const folderModule = await import('../src/folderHierarchy.js');
+
+      const noteWithPath = createWebNote('note-1', 'Note 1');
+      const noteWithoutPath = createWebNote('note-2', 'Note 2');
+
+      vi.mocked(processMarkdownContentsToWeb).mockResolvedValue({
+        files: [
+          createWebFile(noteWithPath, 'note1.md'),
+          { note: noteWithoutPath, relativePath: undefined, filePath: undefined }
+        ],
+        errors: []
+      });
+      vi.mocked(buildNoteGraph).mockReturnValue({ nodes: new Map(), edges: [] });
+      vi.mocked(generateSearchIndex).mockReturnValue({ documents: new Map() });
+
+      const folderSpy = vi
+        .spyOn(folderModule, 'buildFolderHierarchy')
+        .mockImplementation((sourceFiles, baseName, slugLookup) => {
+          expect(Array.from(slugLookup.entries())).toEqual([
+            ['note1.md', noteWithPath.slug]
+          ]);
+          return {
+            name: baseName,
+            path: '',
+            depth: 0,
+            notes: [],
+            children: []
+          };
+        });
+
+      const config: BuildConfig = {
+        sourceDir,
+        outputDir
+      };
+
+      const builder = new PapyrBuilder(config);
+      await builder.build();
+
+      folderSpy.mockRestore();
+    });
   });
 
   describe('File Discovery', () => {
