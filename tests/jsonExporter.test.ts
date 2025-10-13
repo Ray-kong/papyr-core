@@ -8,7 +8,7 @@ import {
   type WebReadyExportedData
 } from '../src/jsonExporter.js';
 import { type ProcessingResult, type WebReadyResult } from '../src/fileProcessor.js';
-import { type NoteGraph, type SearchIndex, type WebReadyNote, type ParsedNote, type Slug } from '../src/types.js';
+import { type NoteGraph, type SearchIndex, type WebReadyNote, type ParsedNote, type Slug, type GraphNode, type GraphLink } from '../src/types.js';
 
 describe('JsonExporter', () => {
   let mockProcessingResult: ProcessingResult;
@@ -84,7 +84,7 @@ describe('JsonExporter', () => {
     };
 
     mockGraph = {
-      nodes: new Map(),
+      nodes: new Map<string, GraphNode>(),
       edges: [],
       backlinks: new Map(),
       orphans: new Set()
@@ -131,6 +131,54 @@ describe('JsonExporter', () => {
       expect(result.graph.edges).toHaveLength(0);
       expect(result.searchIndex.documents).toHaveLength(0);
     });
+
+    it('should include graph statistics and search index documents', () => {
+      const enrichedGraph: NoteGraph = {
+        nodes: new Map<string, GraphNode>([
+          ['note1', {
+            id: 'note1',
+            label: 'Note 1',
+            metadata: {},
+            linkCount: 1,
+            backlinkCount: 0,
+            forwardLinkCount: 1
+          }]
+        ]),
+        edges: [{ source: 'note1', target: 'note2' } as GraphLink],
+        backlinks: new Map([['note2', new Set(['note1'])]]),
+        orphans: new Set(['orphan'])
+      };
+
+      const indexNote: ParsedNote = {
+        slug: 'note1' as Slug,
+        html: '<p>Indexed</p>',
+        raw: 'Indexed note content',
+        metadata: { title: 'Indexed Note', tags: ['index'] },
+        linksTo: [],
+        embeds: [],
+        headings: []
+      };
+
+      const searchIndex: SearchIndex = {
+        documents: new Map([[indexNote.slug, indexNote]]),
+        index: {} as any
+      };
+
+      const result = exportToJSON(mockProcessingResult, enrichedGraph, searchIndex);
+
+      expect(result.graph.nodes).toHaveLength(1);
+      expect(result.graph.statistics).toBeDefined();
+      expect(result.graph.orphans).toContain('orphan');
+      expect(result.searchIndex.documents).toHaveLength(1);
+      expect(result.searchIndex.stats.totalDocuments).toBe(1);
+      expect(result.searchIndex.documents[0].title).toBe('Indexed Note');
+    });
+
+    it('should omit metadata when includeMetadata is false', () => {
+      const result = exportToJSON(mockProcessingResult, mockGraph, mockSearchIndex, { includeMetadata: false });
+
+      expect(result.metadata).toBeUndefined();
+    });
   });
 
   describe('exportWebReadyToJSON', () => {
@@ -151,6 +199,12 @@ describe('JsonExporter', () => {
       expect(noteOne.wordCount).toBe(10);
       expect(noteOne.readingTime).toBe(1);
       expect(noteOne.tags).toEqual(['tag1']);
+    });
+
+    it('should omit metadata when includeMetadata is false for web-ready data', () => {
+      const result = exportWebReadyToJSON(mockWebReadyResult, mockGraph, mockSearchIndex, { includeMetadata: false });
+
+      expect(result.metadata).toBeUndefined();
     });
   });
 
@@ -223,6 +277,15 @@ describe('JsonExporter', () => {
 
       expect(result.statistics.totalErrors).toBe(1);
       expect(result.notes).toHaveLength(2); // Should still export successful files
+    });
+
+    it('should support compact output when pretty is false', () => {
+      const compactData = exportToJSON(mockProcessingResult, mockGraph, mockSearchIndex);
+      const jsonString = toJSONString(compactData, false);
+
+      expect(jsonString.includes('\n')).toBe(false);
+      const parsed = JSON.parse(jsonString);
+      expect(parsed.notes).toHaveLength(2);
     });
   });
 });

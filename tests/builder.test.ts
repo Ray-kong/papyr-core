@@ -2,7 +2,65 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { PapyrBuilder, type BuildConfig } from '../src/builder.js';
+import { PapyrBuilder, type BuildConfig, type BuildResult } from '../src/builder.js';
+
+const createWebNote = (slug: string, title: string) => ({
+  slug,
+  title,
+  html: `<h1>${title}</h1>`,
+  metadata: {},
+  linksTo: [],
+  embeds: [],
+  headings: [],
+  tags: [],
+  wordCount: 0,
+  readingTime: 0,
+  description: title,
+  keywords: []
+});
+
+const createWebFile = (note: ReturnType<typeof createWebNote>, relativePath: string) => ({
+  note,
+  relativePath,
+  filePath: relativePath
+});
+
+const createBuildResult = (builder: PapyrBuilder): BuildResult => ({
+  notes: [],
+  graph: { nodes: new Map(), edges: [], backlinks: new Map(), orphans: new Set() } as any,
+  searchIndex: { documents: new Map(), index: {} },
+  analytics: {
+    basic: {
+      totalNotes: 0,
+      totalLinks: 0,
+      orphanedNotes: 0,
+      averageConnections: 0,
+      buildTime: 0
+    },
+    graph: {} as any,
+    content: {} as any,
+    tags: { topTags: [] }
+  },
+  buildInfo: {
+    timestamp: new Date().toISOString(),
+    duration: 0,
+    version: 'test',
+    config: (builder as any).config,
+    sources: {
+      totalFiles: 0,
+      processedFiles: 0,
+      skippedFiles: 0,
+      errors: []
+    }
+  },
+  folderHierarchy: {
+    name: 'root',
+    path: '',
+    depth: 0,
+    notes: [],
+    children: []
+  }
+});
 
 // Mock the dependencies
 vi.mock('../src/index.js', () => ({
@@ -34,6 +92,7 @@ describe('PapyrBuilder', () => {
   let sourceDir: string;
 
   beforeEach(async () => {
+    vi.clearAllMocks();
     // Create temporary directories using cross-platform temp dir
     const tmpPrefix = path.join(os.tmpdir(), 'papyr-test-');
     tempDir = await fs.promises.mkdtemp(tmpPrefix);
@@ -139,12 +198,12 @@ describe('PapyrBuilder', () => {
       
       // Mock the dependencies
       const mockNotes = [
-        { id: 'note1', title: 'Note 1', content: 'Content with [[Note 2]] link.' },
-        { id: 'note2', title: 'Note 2', content: 'Content of note 2.' }
+        createWebNote('note-1', 'Note 1'),
+        createWebNote('note-2', 'Note 2')
       ];
       
       vi.mocked(processMarkdownContentsToWeb).mockResolvedValue({
-        files: mockNotes.map(note => ({ note })),
+        files: mockNotes.map((note, index) => createWebFile(note, `note${index + 1}.md`)),
         errors: []
       });
       vi.mocked(buildNoteGraph).mockReturnValue({ nodes: new Map(), edges: [] });
@@ -207,7 +266,7 @@ describe('PapyrBuilder', () => {
       const { processMarkdownContentsToWeb, buildNoteGraph, generateSearchIndex } = await import('../src/index.js');
       
       vi.mocked(processMarkdownContentsToWeb).mockResolvedValue({
-        files: [{ note: { id: 'note1', title: 'Note 1' } }],
+        files: [createWebFile(createWebNote('note-1', 'Note 1'), 'note1.md')],
         errors: []
       });
       vi.mocked(buildNoteGraph).mockReturnValue({ nodes: new Map(), edges: [] });
@@ -223,6 +282,62 @@ describe('PapyrBuilder', () => {
 
       expect(result.buildInfo.duration).toBeGreaterThanOrEqual(0);
       expect(result.analytics.basic.buildTime).toBeGreaterThanOrEqual(0);
+    });
+
+    it('should fallback to default error metadata when plugin error lacks details', async () => {
+      await fs.promises.writeFile(
+        path.join(sourceDir, 'note1.md'),
+        '# Note 1\n\nContent.'
+      );
+
+      const { processMarkdownContentsToWeb, buildNoteGraph, generateSearchIndex } = await import('../src/index.js');
+
+      vi.mocked(processMarkdownContentsToWeb).mockResolvedValue({
+        files: [],
+        errors: [
+          {
+            filePath: undefined,
+            error: undefined
+          }
+        ]
+      });
+      vi.mocked(buildNoteGraph).mockReturnValue({ nodes: new Map(), edges: [] });
+      vi.mocked(generateSearchIndex).mockReturnValue({ documents: new Map() });
+
+      const config: BuildConfig = {
+        sourceDir,
+        outputDir
+      };
+
+      const builder = new PapyrBuilder(config);
+      const result = await builder.build();
+
+      expect(result.buildInfo.sources.errors).toHaveLength(1);
+      expect(result.buildInfo.sources.errors[0].message).toBe('Unknown error');
+      expect(result.buildInfo.sources.errors[0].file).toBe('unknown');
+    });
+
+    it('should rethrow and log build failures', async () => {
+      await fs.promises.writeFile(
+        path.join(sourceDir, 'note1.md'),
+        '# Note 1\n\nContent.'
+      );
+
+      const { processMarkdownContentsToWeb } = await import('../src/index.js');
+      vi.mocked(processMarkdownContentsToWeb).mockRejectedValueOnce(new Error('pipeline boom'));
+
+      const config: BuildConfig = {
+        sourceDir,
+        outputDir
+      };
+
+      const builder = new PapyrBuilder(config);
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      await expect(builder.build()).rejects.toThrow('pipeline boom');
+      expect(errorSpy).toHaveBeenCalledWith('❌ Build failed:', expect.any(Error));
+
+      errorSpy.mockRestore();
     });
   });
 
@@ -325,6 +440,50 @@ describe('PapyrBuilder', () => {
       const files = await discoverSourceFiles();
 
       expect(files).toHaveLength(0);
+    });
+
+    it('should warn when a file cannot be read', async () => {
+      await fs.promises.writeFile(path.join(sourceDir, 'note1.md'), '# Note 1');
+
+      const config: BuildConfig = {
+        sourceDir,
+        outputDir
+      };
+
+      const builder = new PapyrBuilder(config);
+      const discoverSourceFiles = (builder as any).discoverSourceFiles.bind(builder);
+
+      const readSpy = vi.spyOn(fs.promises, 'readFile').mockRejectedValueOnce(new Error('read failure'));
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const files = await discoverSourceFiles();
+
+      expect(files).toHaveLength(0);
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Could not read file'), expect.any(Error));
+
+      readSpy.mockRestore();
+      warnSpy.mockRestore();
+    });
+
+    it('should warn when source directory cannot be read', async () => {
+      const missingSourceDir = path.join(tempDir, 'missing-source');
+
+      const config: BuildConfig = {
+        sourceDir: missingSourceDir,
+        outputDir
+      };
+
+      const builder = new PapyrBuilder(config);
+      const discoverSourceFiles = (builder as any).discoverSourceFiles.bind(builder);
+
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const files = await discoverSourceFiles();
+
+      expect(files).toHaveLength(0);
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Could not read directory'), expect.any(Error));
+
+      warnSpy.mockRestore();
     });
   });
 
@@ -489,6 +648,36 @@ describe('PapyrBuilder', () => {
       expect(result.children[0].name).toBe('child');
       expect(result.children[0].parent).toBeUndefined();
     });
+
+    it('should skip duplicate children when serializing folder hierarchy', () => {
+      const config: BuildConfig = {
+        sourceDir,
+        outputDir
+      };
+
+      const builder = new PapyrBuilder(config);
+      const serializeFolderHierarchy = (builder as any).serializeFolderHierarchy.bind(builder);
+
+      const child: any = {
+        name: 'child',
+        path: 'child',
+        depth: 1,
+        notes: ['note'],
+        children: []
+      };
+      const root: any = {
+        name: 'root',
+        path: '',
+        depth: 0,
+        notes: [],
+        children: [child, child]
+      };
+
+      const serialized = serializeFolderHierarchy(root);
+
+      expect(serialized.children).toHaveLength(1);
+      expect(serialized.children[0].name).toBe('child');
+    });
   });
 
   describe('Watch Functionality', () => {
@@ -534,6 +723,7 @@ describe('PapyrBuilder', () => {
       expect(mockWatcher.close).toHaveBeenCalled();
       expect((builder as any).fileWatcher).toBeUndefined();
     });
+
   });
 
   describe('Output', () => {
@@ -579,7 +769,7 @@ describe('PapyrBuilder', () => {
       const { processMarkdownContentsToWeb, buildNoteGraph, generateSearchIndex } = await import('../src/index.js');
       
       vi.mocked(processMarkdownContentsToWeb).mockResolvedValue({
-        files: [{ note: { id: 'note1', title: 'Note 1' } }],
+        files: [createWebFile(createWebNote('note-1', 'Note 1'), 'note1.md')],
         errors: []
       });
       vi.mocked(buildNoteGraph).mockReturnValue({ nodes: new Map(), edges: [] });
@@ -611,7 +801,7 @@ describe('PapyrBuilder', () => {
       const { processMarkdownContentsToWeb, buildNoteGraph, generateSearchIndex } = await import('../src/index.js');
       
       vi.mocked(processMarkdownContentsToWeb).mockResolvedValue({
-        files: [{ note: { id: 'note1', title: 'Note 1' } }],
+        files: [createWebFile(createWebNote('note-1', 'Note 1'), 'note1.md')],
         errors: []
       });
       vi.mocked(buildNoteGraph).mockReturnValue({ nodes: new Map(), edges: [] });
@@ -631,6 +821,33 @@ describe('PapyrBuilder', () => {
       // Check that only combined file was created
       expect(fs.existsSync(path.join(outputDir, 'papyr-data.json'))).toBe(true);
       expect(fs.existsSync(path.join(outputDir, 'notes.json'))).toBe(false);
+    });
+
+    it('should attempt to export additional formats without throwing', async () => {
+      const config: BuildConfig = {
+        sourceDir,
+        outputDir,
+        output: {
+          formats: ['json', 'csv', 'markdown', 'yaml'],
+          separateFiles: false
+        }
+      };
+
+      const builder = new PapyrBuilder(config);
+      const saveSpy = vi.spyOn(builder as any, 'saveToFile').mockResolvedValue(undefined);
+      const exportSpy = vi.spyOn(builder as any, 'exportToFormat');
+
+      const result = createBuildResult(builder);
+
+      await (builder as any).outputResults(result);
+
+      expect(exportSpy).toHaveBeenCalledTimes(3);
+      expect(exportSpy).toHaveBeenNthCalledWith(1, result, 'csv');
+      expect(exportSpy).toHaveBeenNthCalledWith(2, result, 'markdown');
+      expect(exportSpy).toHaveBeenNthCalledWith(3, result, 'yaml');
+
+      exportSpy.mockRestore();
+      saveSpy.mockRestore();
     });
   });
 });
