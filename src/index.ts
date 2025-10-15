@@ -37,7 +37,9 @@ export {
   addNoteToIndex,
   removeNoteFromIndex,
   updateNoteInIndex,
-  getSearchSuggestions
+  getSearchSuggestions,
+  exportSearchIndex,
+  importSearchIndex
 } from './search'
 
 // Content processing (no file system access)

@@ -28,7 +28,26 @@ const createWebFile = (note: ReturnType<typeof createWebNote>, relativePath: str
 const createBuildResult = (builder: PapyrBuilder): BuildResult => ({
   notes: [],
   graph: { nodes: new Map(), edges: [], backlinks: new Map(), orphans: new Set() } as any,
-  searchIndex: { documents: new Map(), index: {} },
+  searchIndex: {
+    documents: new Map(),
+    index: {},
+    config: {
+      preset: 'default',
+      tokenize: 'forward',
+      resolution: 9,
+      depth: 4,
+      context: { depth: 4, resolution: 9, bidirectional: false },
+      document: {
+        id: 'slug',
+        index: [
+          { field: 'title', tokenize: 'forward', preset: 'default' },
+          { field: 'content', tokenize: 'forward', preset: 'default' },
+          { field: 'tags', tokenize: 'forward', preset: 'default' },
+          { field: 'metadata', tokenize: 'forward', preset: 'default' }
+        ]
+      }
+    }
+  },
   analytics: {
     basic: {
       totalNotes: 0,
@@ -66,7 +85,27 @@ const createBuildResult = (builder: PapyrBuilder): BuildResult => ({
 vi.mock('../src/index.js', () => ({
   processMarkdownContentsToWeb: vi.fn(),
   buildNoteGraph: vi.fn(),
-  generateSearchIndex: vi.fn()
+  generateSearchIndex: vi.fn(),
+  exportSearchIndex: vi.fn().mockResolvedValue({
+    config: {
+      preset: 'default',
+      tokenize: 'forward',
+      resolution: 9,
+      depth: 4,
+      context: { depth: 4, resolution: 9, bidirectional: false },
+      document: {
+        id: 'slug',
+        index: [
+          { field: 'title', tokenize: 'forward', preset: 'default' },
+          { field: 'content', tokenize: 'forward', preset: 'default' },
+          { field: 'tags', tokenize: 'forward', preset: 'default' },
+          { field: 'metadata', tokenize: 'forward', preset: 'default' }
+        ]
+      }
+    },
+    index: {},
+    documents: {}
+  })
 }));
 
 vi.mock('../src/analytics.js', () => ({

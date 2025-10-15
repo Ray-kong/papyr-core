@@ -4,6 +4,7 @@ import {
   processMarkdownContentsToWeb,
   buildNoteGraph,
   generateSearchIndex,
+  exportSearchIndex,
   type BuildConfig,
   type BuildResult,
   type SourceFile,
@@ -349,12 +350,13 @@ export class PapyrBuilder {
   private async outputResults(result: BuildResult): Promise<void> {
     const formats = this.config.output?.formats || ['json'];
     const separateFiles = this.config.output?.separateFiles ?? true;
+    const serializedSearchIndex = await exportSearchIndex(result.searchIndex);
 
     if (separateFiles) {
       // Output as separate files
       await this.saveToFile('notes.json', result.notes);
       await this.saveToFile('graph.json', this.serializeForJSON(result.graph));
-      await this.saveToFile('search-index.json', this.serializeForJSON(result.searchIndex));
+      await this.saveToFile('search-index.json', serializedSearchIndex);
       await this.saveToFile('analytics.json', result.analytics);
       await this.saveToFile('build-info.json', result.buildInfo);
       await this.saveToFile('folder-hierarchy.json', this.serializeFolderHierarchy(result.folderHierarchy));
@@ -364,7 +366,7 @@ export class PapyrBuilder {
     const combinedData = {
       notes: result.notes,
       graph: this.serializeForJSON(result.graph),
-      searchIndex: this.serializeForJSON(result.searchIndex),
+      searchIndex: serializedSearchIndex,
       analytics: result.analytics,
       buildInfo: result.buildInfo,
       folderHierarchy: this.serializeFolderHierarchy(result.folderHierarchy)

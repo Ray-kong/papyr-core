@@ -154,10 +154,34 @@ export interface FolderNode {
 // Search-related types
 // ===========================
 
+export interface SearchIndexConfig {
+  preset: string
+  tokenize: string
+  resolution: number
+  depth: number
+  context: {
+    depth: number
+    resolution: number
+    bidirectional: boolean
+  }
+  document: {
+    id: string
+    index: Array<{ field: string; tokenize: string; preset: string }>
+  }
+}
+
 /** Search index with FlexSearch and document store */
 export interface SearchIndex {
   index: any  // FlexSearch index instance
   documents: Map<Slug, ParsedNote>  // slug -> original note mapping
+  config: SearchIndexConfig
+}
+
+/** Serialized search index data for build outputs */
+export interface SerializedSearchIndex {
+  config: SearchIndexConfig
+  index: Record<string, string>
+  documents: Record<string, ParsedNote>
 }
 
 /** Indexed document record for search processing */

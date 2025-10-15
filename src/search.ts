@@ -8,8 +8,36 @@ import {
   SearchBoost,
   SearchRecord,
   Slug,
-  Frontmatter
+  Frontmatter,
+  SerializedSearchIndex,
+  SearchIndexConfig
 } from './types'
+
+function buildSearchIndexConfig(options: IndexOptions = {}): SearchIndexConfig {
+  const {
+    preset = 'default',
+    tokenize = 'forward',
+    resolution = 9,
+    depth = 4
+  } = options
+
+  return {
+    preset,
+    tokenize,
+    resolution,
+    depth,
+    context: { depth, resolution, bidirectional: false },
+    document: {
+      id: 'slug',
+      index: [
+        { field: 'title', tokenize, preset },
+        { field: 'content', tokenize, preset },
+        { field: 'tags', tokenize, preset },
+        { field: 'metadata', tokenize, preset }
+      ]
+    }
+  }
+}
 
 /**
  * Generate a FlexSearch index from an array of notes
@@ -21,29 +49,16 @@ export function generateSearchIndex(
   notes: ParsedNote[], 
   options: IndexOptions = {}
 ): SearchIndex {
-  const {
-    preset = 'default',
-    tokenize = 'forward',
-    resolution = 9,
-    depth = 4
-  } = options
+  const config = buildSearchIndexConfig(options)
 
   // Create document-based index for multi-field search
   // FlexSearch Document has restrictive types, so we'll use a basic configuration
   const index = new FlexSearch.Document({
-    preset: preset as any,
-    tokenize: tokenize as any,
-    resolution,
-    context: { depth, resolution, bidirectional: false },
-    document: {
-      id: 'slug',
-      index: [
-        { field: 'title', tokenize: tokenize as any, preset: preset as any },
-        { field: 'content', tokenize: tokenize as any, preset: preset as any },
-        { field: 'tags', tokenize: tokenize as any, preset: preset as any },
-        { field: 'metadata', tokenize: tokenize as any, preset: preset as any }
-      ]
-    }
+    preset: config.preset as any,
+    tokenize: config.tokenize as any,
+    resolution: config.resolution,
+    context: config.context,
+    document: config.document as any
   })
 
   // Create document map for quick lookup
@@ -66,7 +81,7 @@ export function generateSearchIndex(
     documents.set(note.slug, note)
   })
 
-  return { index, documents }
+  return { index, documents, config }
 }
 
 /**
@@ -234,7 +249,10 @@ function generateHighlights(query: string, record: SearchRecord, field: string):
   }
 
   // Simple case-insensitive search for highlights
-  const queryTerms = query.toLowerCase().split(/\s+/)
+  const queryTerms = query
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(term => term.length > 0)
   const contentLower = content.toLowerCase()
 
   queryTerms.forEach(term => {
@@ -382,5 +400,49 @@ export function getSearchSuggestions(
   } catch (error) {
     // Fallback: return empty array if suggestions fail
     return []
+  }
+}
+
+export async function exportSearchIndex(searchIndex: SearchIndex): Promise<SerializedSearchIndex> {
+  const exportedIndex: Record<string, string> = {}
+
+  await searchIndex.index.export((key: string, data: string) => {
+    exportedIndex[key] = data
+  })
+
+  const documents: Record<string, ParsedNote> = {}
+  searchIndex.documents.forEach((note, slug) => {
+    documents[slug] = note
+  })
+
+  return {
+    config: searchIndex.config,
+    index: exportedIndex,
+    documents
+  }
+}
+
+export function importSearchIndex(serialized: SerializedSearchIndex): SearchIndex {
+  const index = new FlexSearch.Document({
+    preset: serialized.config.preset as any,
+    tokenize: serialized.config.tokenize as any,
+    resolution: serialized.config.resolution,
+    context: serialized.config.context,
+    document: serialized.config.document as any
+  })
+
+  Object.entries(serialized.index).forEach(([key, data]) => {
+    index.import(key, data)
+  })
+
+  const documents = new Map<Slug, ParsedNote>()
+  Object.entries(serialized.documents).forEach(([slug, note]) => {
+    documents.set(slug as Slug, note)
+  })
+
+  return {
+    index,
+    documents,
+    config: serialized.config
   }
 }
