@@ -5,10 +5,70 @@
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "typesVersions": {
+    "*": {
+      "runtime": [
+        "dist/runtime.d.ts"
+      ],
+      "graph": [
+        "dist/graph.d.ts"
+      ],
+      "graphAnalysis": [
+        "dist/graphAnalysis.d.ts"
+      ],
+      "linkResolver": [
+        "dist/linkResolver.d.ts"
+      ],
+      "folderHierarchy": [
+        "dist/folderHierarchy.d.ts"
+      ],
+      "search": [
+        "dist/search.d.ts"
+      ],
+      "jsonExporter": [
+        "dist/jsonExporter.d.ts"
+      ],
+      "analytics": [
+        "dist/analytics.d.ts"
+      ]
+    }
+  },
   "exports": {
     ".": {
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
+    },
+    "./runtime": {
+      "import": "./dist/runtime.js",
+      "types": "./dist/runtime.d.ts"
+    },
+    "./graph": {
+      "import": "./dist/graph.js",
+      "types": "./dist/graph.d.ts"
+    },
+    "./graphAnalysis": {
+      "import": "./dist/graphAnalysis.js",
+      "types": "./dist/graphAnalysis.d.ts"
+    },
+    "./linkResolver": {
+      "import": "./dist/linkResolver.js",
+      "types": "./dist/linkResolver.d.ts"
+    },
+    "./folderHierarchy": {
+      "import": "./dist/folderHierarchy.js",
+      "types": "./dist/folderHierarchy.d.ts"
+    },
+    "./search": {
+      "import": "./dist/search.js",
+      "types": "./dist/search.d.ts"
+    },
+    "./jsonExporter": {
+      "import": "./dist/jsonExporter.js",
+      "types": "./dist/jsonExporter.d.ts"
+    },
+    "./analytics": {
+      "import": "./dist/analytics.js",
+      "types": "./dist/analytics.d.ts"
     }
   },
   "files": [

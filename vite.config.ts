@@ -11,7 +11,8 @@ export default defineConfig({
     target: 'node18',
     lib: {
       entry: {
-        index: 'src/index.ts'
+        index: 'src/index.ts',
+        runtime: 'src/runtime/index.ts'
       },
       formats: ['es'],
     },
@@ -19,6 +20,11 @@ export default defineConfig({
       external: [
         'node:crypto'
       ],
+      output: {
+        entryFileNames: '[name].js',
+        chunkFileNames: '[name].js',
+        assetFileNames: '[name][extname]'
+      }
     },
     ssr: true,
   },
