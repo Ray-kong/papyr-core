@@ -54,6 +54,14 @@ export async function parseMarkdown(md: string, options: ParseOptions = {}): Pro
       headingSlugCounts.set(baseSlug, existing + 1)
       const finalSlug = existing === 0 ? baseSlug : `${baseSlug}-${existing}`
 
+      if (!node.data) {
+        node.data = {}
+      }
+      if (!node.data.hProperties) {
+        node.data.hProperties = {}
+      }
+      node.data.hProperties.id = finalSlug
+
       collectedHeadings.push({
         level: depth,
         text,
