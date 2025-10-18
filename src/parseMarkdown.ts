@@ -9,6 +9,7 @@ import rehypeStringify from 'rehype-stringify'
 import rehypeHighlight from 'rehype-highlight'
 import slugify from 'slugify'
 import crypto from 'node:crypto'
+import { visit } from 'unist-util-visit'
 
 export async function parseMarkdown(md: string, options: ParseOptions = {}): Promise<ParsedNote> {
   // 1. Extract frontmatter using gray-matter with error handling
@@ -29,9 +30,42 @@ export async function parseMarkdown(md: string, options: ParseOptions = {}): Pro
   const linksTo = new Set<string>()
   
   // 3. Parse markdown with remark → rehype pipeline
+  const collectedHeadings: Heading[] = []
+  const headingSlugCounts = new Map<string, number>()
+
+  const collectHeadingsPlugin = () => (tree: unknown) => {
+    visit(tree as any, 'heading', (node: any) => {
+      if (!node || typeof node.depth !== 'number') {
+        return
+      }
+
+      const depth = Math.min(Math.max(node.depth, 1), 6) as Heading['level']
+      const text = extractHeadingText(node).trim()
+      if (!text) {
+        return
+      }
+
+      let baseSlug = slugify(text, { lower: true, strict: true })
+      if (!baseSlug) {
+        baseSlug = `heading-${collectedHeadings.length + 1}`
+      }
+
+      const existing = headingSlugCounts.get(baseSlug) ?? 0
+      headingSlugCounts.set(baseSlug, existing + 1)
+      const finalSlug = existing === 0 ? baseSlug : `${baseSlug}-${existing}`
+
+      collectedHeadings.push({
+        level: depth,
+        text,
+        slug: finalSlug
+      })
+    })
+  }
+
   const processor = unified()
     .use(remarkParse)
     .use(remarkGfm)
+    .use(collectHeadingsPlugin)
     .use(remarkWikiLink, {
       pageResolver: (name: string) => {
         // Remove hash fragments and normalize the wiki link to a slug format
@@ -97,7 +131,6 @@ export async function parseMarkdown(md: string, options: ParseOptions = {}): Pro
   const excerpt = excerptMatch ? excerptMatch[1].replace(/\[\[.*?\]\]/g, '').trim() : ''
 
   const filteredLinks = Array.from(linksTo).filter(link => link.length > 0)
-  const collectedHeadings: Heading[] = []
   const collectedEmbeds: string[] = []
   
   // Ensure the slug is a string before branding it
@@ -189,6 +222,24 @@ export function toWebReadyNote(note: ParsedNote): WebReadyNote {
     keywords: Array.from(keywordSet),
     ogImage
   }
+}
+
+function extractHeadingText(node: any): string {
+  if (!node) {
+    return ''
+  }
+
+  if (typeof node.value === 'string') {
+    return node.value
+  }
+
+  if (Array.isArray(node.children)) {
+    return node.children
+      .map((child: any) => extractHeadingText(child))
+      .join('')
+  }
+
+  return ''
 }
 
 function normalizeStringArray(value: unknown): string[] {

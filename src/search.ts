@@ -31,6 +31,7 @@ function buildSearchIndexConfig(options: IndexOptions = {}): SearchIndexConfig {
       id: 'slug',
       index: [
         { field: 'title', tokenize, preset },
+        { field: 'headings', tokenize, preset },
         { field: 'content', tokenize, preset },
         { field: 'tags', tokenize, preset },
         { field: 'metadata', tokenize, preset }
@@ -72,6 +73,7 @@ export function generateSearchIndex(
     index.add({
       slug: record.slug,
       title: record.title,
+      headings: record.headings.join(' '),
       content: record.content,
       tags: record.tags.join(' '),
       metadata: metadataToSearchText(record.metadata)
@@ -100,10 +102,10 @@ export function searchNotes(
     limit = 20,
     fuzzy = true,
     highlight = false,
-    fields = ['title', 'content', 'tags', 'metadata'],
+    fields = ['title', 'headings', 'content', 'tags', 'metadata'],
     tags,
     minimumScore = 0,
-    boost = { title: 3, metadata: 2, content: 1 }
+    boost = { title: 5, headings: 3, metadata: 2, content: 1 }
   } = options
 
   if (!query.trim()) {
@@ -148,11 +150,20 @@ export function searchNotes(
         existingResult.score += fieldBoost
         if (!existingResult.matchedFields.includes(field)) {
           existingResult.matchedFields.push(field)
+          if (field === 'headings') {
+            const headingExcerpt = findHeadingExcerpt(record, query)
+            if (headingExcerpt) {
+              existingResult.excerpt = headingExcerpt
+            }
+          }
         }
       } else {
         // Create new result
         const title = record.title
-        const excerpt = record.excerpt ?? buildExcerpt(record.content)
+        let excerpt = record.excerpt ?? buildExcerpt(record.content)
+        if (field === 'headings') {
+          excerpt = findHeadingExcerpt(record, query) ?? excerpt
+        }
 
         const result: SearchResult = {
           slug: typedSlug,
@@ -190,6 +201,7 @@ export function addNoteToIndex(note: ParsedNote, searchIndex: SearchIndex): void
   searchIndex.index.add({
     slug: record.slug,
     title: record.title,
+    headings: record.headings.join(' '),
     content: record.content,
     tags: record.tags.join(' '),
     metadata: metadataToSearchText(record.metadata)
@@ -231,6 +243,28 @@ function generateHighlights(query: string, record: SearchRecord, field: string):
   // This is a simplified highlight implementation
   // In a production system, you might want more sophisticated highlighting
   const highlights: any[] = []
+
+  if (field === 'headings') {
+    const normalizedQuery = query.trim().toLowerCase()
+    if (!normalizedQuery) {
+      return highlights
+    }
+
+    record.headings.forEach(heading => {
+      const headingLower = heading.toLowerCase()
+      const matchIndex = headingLower.indexOf(normalizedQuery)
+      if (matchIndex !== -1) {
+        highlights.push({
+          field,
+          start: matchIndex,
+          end: matchIndex + normalizedQuery.length,
+          text: heading
+        })
+      }
+    })
+
+    return highlights
+  }
   
   let content = ''
   switch (field) {
@@ -283,15 +317,32 @@ export function createSearchRecord(note: ParsedNote): SearchRecord {
   const tags = normalizeTags((metadata as any).tags)
   const content = note.raw || note.html.replace(/<[^>]*>/g, '')
   const excerpt = note.excerpt || buildExcerpt(content)
+  const headings = (note.headings ?? []).map(heading => heading.text).filter(Boolean)
 
   return {
     slug: note.slug as Slug,
     title: typeof metadata.title === 'string' && metadata.title.length > 0 ? metadata.title : note.slug,
+    headings,
     content,
     tags,
     metadata,
     excerpt
   }
+}
+
+function findHeadingExcerpt(record: SearchRecord, query: string): string | undefined {
+  if (!record.headings.length) {
+    return undefined
+  }
+
+  const normalizedQuery = query.trim().toLowerCase()
+  if (!normalizedQuery) {
+    return undefined
+  }
+
+  return record.headings.find(heading =>
+    heading.toLowerCase().includes(normalizedQuery)
+  )
 }
 
 /**

@@ -189,6 +189,7 @@ export interface SearchRecord {
   slug: Slug
   title: string
   content: string
+  headings: string[]
   tags: string[]
   metadata: Frontmatter
   excerpt?: string
@@ -226,6 +227,7 @@ export interface SearchOptions {
 
 export interface SearchBoost {
   title?: number  // boost factor for title matches (default: 3)
+  headings?: number  // boost factor for heading matches (default: 2.5)
   metadata?: number  // boost factor for metadata matches (default: 2)
   content?: number  // boost factor for content matches (default: 1)
 }
