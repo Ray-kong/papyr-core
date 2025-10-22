@@ -54,6 +54,13 @@ export interface Heading {
   line?: number
 }
 
+/** Code block extracted from markdown */
+export interface CodeBlock {
+  language?: string | null
+  meta?: string | null
+  value: string
+}
+
 /** Link reference within a note */
 export interface LinkReference {
   type: 'wiki' | 'markdown' | 'embed'
@@ -81,6 +88,7 @@ export interface ParsedNote {
   linksTo: string[]
   embeds: string[]
   headings: Heading[]
+  codeBlocks: CodeBlock[]
   raw?: string
   excerpt?: string
   ast?: ASTNode

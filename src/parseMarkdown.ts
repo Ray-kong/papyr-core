@@ -1,4 +1,4 @@
-import { ParsedNote, ParseOptions, WebReadyNote, Slug, Frontmatter, Heading } from './types'
+import { ParsedNote, ParseOptions, WebReadyNote, Slug, Frontmatter, Heading, CodeBlock } from './types'
 import matter from 'gray-matter'
 import { unified } from 'unified'
 import remarkParse from 'remark-parse'
@@ -28,10 +28,11 @@ export async function parseMarkdown(md: string, options: ParseOptions = {}): Pro
   
   // 2. Create a set to collect wiki links
   const linksTo = new Set<string>()
-  
+
   // 3. Parse markdown with remark → rehype pipeline
   const collectedHeadings: Heading[] = []
   const headingSlugCounts = new Map<string, number>()
+  const collectedCodeBlocks: CodeBlock[] = []
 
   const collectHeadingsPlugin = () => (tree: unknown) => {
     visit(tree as any, 'heading', (node: any) => {
@@ -70,15 +71,43 @@ export async function parseMarkdown(md: string, options: ParseOptions = {}): Pro
     })
   }
 
+  const collectCodeBlocksPlugin = () => (tree: unknown) => {
+    visit(tree as any, 'code', (node: any) => {
+      if (!node || typeof node.value !== 'string') {
+        return
+      }
+
+      collectedCodeBlocks.push({
+        language: typeof node.lang === 'string' ? node.lang : null,
+        meta: typeof node.meta === 'string' ? node.meta : null,
+        value: node.value
+      })
+    })
+  }
+
   const processor = unified()
     .use(remarkParse)
     .use(remarkGfm)
     .use(collectHeadingsPlugin)
+    .use(collectCodeBlocksPlugin)
     .use(remarkWikiLink, {
       pageResolver: (name: string) => {
         // Remove hash fragments and normalize the wiki link to a slug format
-        const cleanName = name.split('#')[0]
-        return [slugify(cleanName, { lower: true, strict: true })]
+        const cleanName = name.split('#')[0]?.trim() ?? ''
+        if (!cleanName) {
+          return []
+        }
+
+        // Support folder-qualified links by resolving to the last segment
+        const segments = cleanName
+          .replace(/\\/g, '/')
+          .split('/')
+          .map(segment => segment.trim())
+          .filter(Boolean)
+
+        const target = segments.length > 0 ? segments[segments.length - 1] : cleanName
+
+        return [slugify(target, { lower: true, strict: true })]
       },
       hrefTemplate: (permalink: string) => {
         // Keep full permalink for hrefs but collect only page part for linksTo
@@ -155,6 +184,7 @@ export async function parseMarkdown(md: string, options: ParseOptions = {}): Pro
     linksTo: filteredLinks,
     embeds: collectedEmbeds,
     headings: collectedHeadings,
+    codeBlocks: collectedCodeBlocks,
     raw: md,
     excerpt: excerpt || undefined
   }
@@ -213,13 +243,7 @@ export function toWebReadyNote(note: ParsedNote): WebReadyNote {
   )
 
   return {
-    slug: note.slug,
-    html: note.html,
-    metadata: note.metadata,
-    linksTo: note.linksTo,
-    embeds: note.embeds,
-    headings: note.headings,
-    excerpt: note.excerpt,
+    ...note,
     title,
     tags: normalizedTags,
     createdAt,

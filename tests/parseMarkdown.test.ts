@@ -18,8 +18,8 @@ describe('parseMarkdown', () => {
         date: '2024-01-01',
         tags: ['test', 'simple']
       })
-      expect(result.html).toContain('<h1>Simple Note</h1>')
-      expect(result.html).toContain('<h2>Features</h2>')
+      expect(result.html).toContain('<h1 id="simple-note">Simple Note</h1>')
+      expect(result.html).toContain('<h2 id="features">Features</h2>')
       expect(result.html).toContain('<ul>')
       expect(result.linksTo).toEqual([])
     })
@@ -30,7 +30,7 @@ describe('parseMarkdown', () => {
 
       expect(result.slug).toBe('no-frontmatter-note')
       expect(result.metadata).toEqual({})
-      expect(result.html).toContain('<h1>No Frontmatter Note</h1>')
+      expect(result.html).toContain('<h1 id="no-frontmatter-note">No Frontmatter Note</h1>')
       expect(result.linksTo).toEqual(['a-wiki-link'])
     })
   })
@@ -80,6 +80,23 @@ Reference [[Getting Started#Installation]] and [[API#Methods]].`
         'getting-started',
         'api'
       ])
+    })
+
+    it('should resolve folder-qualified wiki links to the note slug', async () => {
+      const content = `---
+title: Folder Links
+---
+
+Link to [[areas/Productivity Systems]] and [[projects/papyr-roadmap]].`
+
+      const result = await parseMarkdown(content)
+
+      expect(result.linksTo).toEqual([
+        'productivity-systems',
+        'papyr-roadmap'
+      ])
+      expect(result.html).toContain('href="#/note/productivity-systems"')
+      expect(result.html).toContain('href="#/note/papyr-roadmap"')
     })
   })
 
@@ -163,7 +180,7 @@ Content here.`
         'api-reference',
         'reference-link'
       ])
-      expect(result.html).toContain('<h1>Complex Note with Multiple Features</h1>')
+      expect(result.html).toContain('<h1 id="complex-note-with-multiple-features">Complex Note with Multiple Features</h1>')
       expect(result.html).toContain('<table>')
       expect(result.html).toContain('<blockquote>')
       expect(result.html).toContain('<strong>bold text</strong>')
@@ -193,6 +210,40 @@ def test():
 
       expect(result.html).toContain('class="hljs language-javascript"')
       expect(result.html).toContain('class="hljs language-python"')
+    })
+
+    it('should collect code block metadata', async () => {
+      const content = `---
+title: Code Metadata
+---
+
+\`\`\`typescript highlight="2-3"
+const value = 42
+console.log(value)
+\`\`\`
+
+Regular text here.
+
+    console.log('indent')
+`
+
+      const result = await parseMarkdown(content)
+
+      expect(result.codeBlocks).toHaveLength(2)
+      expect(result.codeBlocks[0]).toMatchObject({
+        language: 'typescript',
+        meta: 'highlight="2-3"'
+      })
+      expect(result.codeBlocks[0].value.trim()).toBe(
+        'const value = 42\nconsole.log(value)'
+      )
+      expect(result.codeBlocks[1]).toMatchObject({
+        language: null,
+        meta: null
+      })
+      expect(result.codeBlocks[1].value.trim()).toBe(
+        "console.log('indent')"
+      )
     })
   })
 
@@ -258,7 +309,7 @@ ${longContent}`
 
       expect(result.slug).toBe('long-content')
       expect(result.metadata.title).toBe('Long Content')
-      expect(result.html).toContain('<h1>Long Note</h1>')
+      expect(result.html).toContain('<h1 id="long-note">Long Note</h1>')
       expect(result.html).toContain(longContent)
     })
 
@@ -442,7 +493,7 @@ Content continues...`
       const result = await parseMarkdown(content)
 
       expect(result.slug).toBe('broken-html')
-      expect(result.html).toContain('<h1>Test</h1>')
+      expect(result.html).toContain('<h1 id="test">Test</h1>')
       // Should handle broken HTML gracefully
       expect(result.html).toContain('Content continues')
     })
