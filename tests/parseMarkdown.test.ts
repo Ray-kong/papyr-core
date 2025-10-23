@@ -98,6 +98,36 @@ Link to [[areas/Productivity Systems]] and [[projects/papyr-roadmap]].`
       expect(result.html).toContain('href="#/note/productivity-systems"')
       expect(result.html).toContain('href="#/note/papyr-roadmap"')
     })
+
+    it('should handle same-note heading anchors', async () => {
+      const content = `---
+title: Anchors
+---
+
+See [[#Local Section]] for details.
+
+## Local Section
+
+Content here.`
+
+      const result = await parseMarkdown(content)
+
+      expect(result.linksTo).toEqual([])
+      expect(result.html).toContain('href="#local-section"')
+    })
+
+    it('should handle cross-note heading anchors', async () => {
+      const content = `---
+title: Cross Anchors
+---
+
+Refer to [[Reference Guide#Deep Dive]].`
+
+      const result = await parseMarkdown(content)
+
+      expect(result.linksTo).toEqual(['reference-guide'])
+      expect(result.html).toContain('href="#/note/reference-guide#deep-dive"')
+    })
   })
 
   describe('Slug generation', () => {

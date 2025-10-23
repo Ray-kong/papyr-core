@@ -85,6 +85,8 @@ export async function parseMarkdown(md: string, options: ParseOptions = {}): Pro
     })
   }
 
+  const SELF_ANCHOR_PREFIX = '__papyr_self_anchor__#'
+
   const processor = unified()
     .use(remarkParse)
     .use(remarkGfm)
@@ -92,31 +94,60 @@ export async function parseMarkdown(md: string, options: ParseOptions = {}): Pro
     .use(collectCodeBlocksPlugin)
     .use(remarkWikiLink, {
       pageResolver: (name: string) => {
-        // Remove hash fragments and normalize the wiki link to a slug format
-        const cleanName = name.split('#')[0]?.trim() ?? ''
-        if (!cleanName) {
+        const rawName = name.trim()
+        if (!rawName) {
           return []
         }
 
-        // Support folder-qualified links by resolving to the last segment
-        const segments = cleanName
+        if (rawName.startsWith('#')) {
+          let anchorText = rawName
+          while (anchorText.startsWith('#')) {
+            anchorText = anchorText.slice(1)
+          }
+          anchorText = anchorText.trim()
+          if (!anchorText) {
+            return []
+          }
+
+          const anchorSlug = slugify(anchorText, { lower: true, strict: true })
+          return [`${SELF_ANCHOR_PREFIX}${anchorSlug}`]
+        }
+
+        const hashIndex = rawName.indexOf('#')
+        const notePart = hashIndex >= 0 ? rawName.slice(0, hashIndex) : rawName
+        const anchorPart = hashIndex >= 0 ? rawName.slice(hashIndex + 1) : ''
+
+        const segments = notePart
           .replace(/\\/g, '/')
           .split('/')
           .map(segment => segment.trim())
           .filter(Boolean)
 
-        const target = segments.length > 0 ? segments[segments.length - 1] : cleanName
+        const target = segments.length > 0 ? segments[segments.length - 1] : notePart.trim()
+        if (!target) {
+          return []
+        }
 
-        return [slugify(target, { lower: true, strict: true })]
+        const noteSlug = slugify(target, { lower: true, strict: true })
+        const anchorValue = anchorPart.trim()
+        const anchorSlug = anchorValue ? slugify(anchorValue, { lower: true, strict: true }) : ''
+
+        const combined = anchorSlug ? `${noteSlug}#${anchorSlug}` : noteSlug
+        return [combined]
       },
       hrefTemplate: (permalink: string) => {
-        // Keep full permalink for hrefs but collect only page part for linksTo
-        const cleanPermalink = permalink.split('#')[0]
-        if (cleanPermalink) {
-          linksTo.add(cleanPermalink)
+        if (permalink.startsWith(SELF_ANCHOR_PREFIX)) {
+          const anchorSlug = permalink.slice(SELF_ANCHOR_PREFIX.length)
+          return `#${anchorSlug}`
         }
-        // Return the href format with full permalink (including hash fragments)
-        return `#/note/${permalink}`
+
+        const [noteSlug, anchorSlug] = permalink.split('#')
+        if (noteSlug) {
+          linksTo.add(noteSlug)
+          return anchorSlug ? `#/note/${noteSlug}#${anchorSlug}` : `#/note/${noteSlug}`
+        }
+
+        return '#'
       }
     })
     .use(remarkRehype)
