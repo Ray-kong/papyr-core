@@ -1,4 +1,4 @@
-import FlexSearch from 'flexsearch'
+import * as FlexSearch from 'flexsearch'
 import { 
   ParsedNote, 
   SearchIndex, 

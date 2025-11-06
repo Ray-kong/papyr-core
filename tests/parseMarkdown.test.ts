@@ -436,6 +436,33 @@ Reference [[#section1]] and [[#section2]].`
       expect(result.linksTo).toEqual([])
     })
 
+    it('should reuse heading fallback slugs for self anchor wiki links', async () => {
+      const content = `# ???
+
+Link to [[#???]].`
+
+      const result = await parseMarkdown(content)
+
+      expect(result.html).toContain('href="#heading-1"')
+      expect(result.headings[0]?.slug).toBe('heading-1')
+    })
+
+    it('should not guess fallback slugs for cross-note wiki links', async () => {
+      const content = `---
+title: Question Note
+---
+
+# ???
+
+See [[Question Note#???]] for details.`
+
+      const result = await parseMarkdown(content)
+
+      expect(result.html).toContain('href="#/note/question-note"')
+      expect(result.html).not.toContain('#/note/question-note#')
+      expect(result.linksTo).toContain('question-note')
+    })
+
     it('should handle malformed wiki link syntax', async () => {
       const content = `---
 title: Malformed Links

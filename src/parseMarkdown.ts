@@ -33,6 +33,40 @@ export async function parseMarkdown(md: string, options: ParseOptions = {}): Pro
   const collectedHeadings: Heading[] = []
   const headingSlugCounts = new Map<string, number>()
   const collectedCodeBlocks: CodeBlock[] = []
+  const selfAnchorPlaceholders = new Map<string, string>()
+
+  const normalizeHeadingKey = (value: string): string => value.trim().toLowerCase()
+
+  const resolveAnchorSlug = (
+    anchorText: string,
+    options: { allowHeadingFallback?: boolean } = {}
+  ): string => {
+    const { allowHeadingFallback = false } = options
+    const trimmed = anchorText.trim()
+    if (!trimmed) {
+      return ''
+    }
+
+    const slugified = slugify(trimmed, { lower: true, strict: true })
+    if (slugified) {
+      return slugified
+    }
+
+    if (allowHeadingFallback) {
+      const normalizedAnchor = normalizeHeadingKey(trimmed)
+      const matchingHeading = collectedHeadings.find(
+        heading => normalizeHeadingKey(heading.text) === normalizedAnchor
+      )
+
+      if (matchingHeading) {
+        return matchingHeading.slug
+      }
+
+      return ''
+    }
+
+    return ''
+  }
 
   const collectHeadingsPlugin = () => (tree: unknown) => {
     visit(tree as any, 'heading', (node: any) => {
@@ -86,6 +120,7 @@ export async function parseMarkdown(md: string, options: ParseOptions = {}): Pro
   }
 
   const SELF_ANCHOR_PREFIX = '__papyr_self_anchor__#'
+  const SELF_ANCHOR_LINK_PREFIX = '#__papyr_anchor__'
 
   const processor = unified()
     .use(remarkParse)
@@ -109,8 +144,9 @@ export async function parseMarkdown(md: string, options: ParseOptions = {}): Pro
             return []
           }
 
-          const anchorSlug = slugify(anchorText, { lower: true, strict: true })
-          return [`${SELF_ANCHOR_PREFIX}${anchorSlug}`]
+          const placeholderId = `self-${selfAnchorPlaceholders.size}`
+          selfAnchorPlaceholders.set(placeholderId, anchorText)
+          return [`${SELF_ANCHOR_PREFIX}${placeholderId}`]
         }
 
         const hashIndex = rawName.indexOf('#')
@@ -130,15 +166,15 @@ export async function parseMarkdown(md: string, options: ParseOptions = {}): Pro
 
         const noteSlug = slugify(target, { lower: true, strict: true })
         const anchorValue = anchorPart.trim()
-        const anchorSlug = anchorValue ? slugify(anchorValue, { lower: true, strict: true }) : ''
+        const anchorSlug = anchorValue ? resolveAnchorSlug(anchorValue) : ''
 
         const combined = anchorSlug ? `${noteSlug}#${anchorSlug}` : noteSlug
         return [combined]
       },
       hrefTemplate: (permalink: string) => {
         if (permalink.startsWith(SELF_ANCHOR_PREFIX)) {
-          const anchorSlug = permalink.slice(SELF_ANCHOR_PREFIX.length)
-          return `#${anchorSlug}`
+          const placeholderId = permalink.slice(SELF_ANCHOR_PREFIX.length)
+          return `${SELF_ANCHOR_LINK_PREFIX}${placeholderId}`
         }
 
         const [noteSlug, anchorSlug] = permalink.split('#')
@@ -151,6 +187,28 @@ export async function parseMarkdown(md: string, options: ParseOptions = {}): Pro
       }
     })
     .use(remarkRehype)
+    .use(() => (tree: unknown) => {
+      visit(tree as any, 'element', (node: any) => {
+        if (!node || node.tagName !== 'a' || !node.properties) {
+          return
+        }
+
+        const href = node.properties.href
+        if (typeof href !== 'string' || !href.startsWith(SELF_ANCHOR_LINK_PREFIX)) {
+          return
+        }
+
+        const placeholderId = href.slice(SELF_ANCHOR_LINK_PREFIX.length)
+        const anchorText = selfAnchorPlaceholders.get(placeholderId)
+        if (!anchorText) {
+          node.properties.href = '#'
+          return
+        }
+
+        const anchorSlug = resolveAnchorSlug(anchorText, { allowHeadingFallback: true })
+        node.properties.href = anchorSlug ? `#${anchorSlug}` : '#'
+      })
+    })
     .use(rehypeHighlight)
     .use(rehypeStringify)
   

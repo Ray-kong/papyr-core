@@ -1,12 +1,7 @@
 import { ProcessingResult, WebReadyResult } from './fileProcessor'
-import { NoteGraph, SearchIndex } from './types'
+import { NoteGraph, SearchIndex, ExportOptions } from './types'
 import { getGraphStatistics } from './graphAnalysis'
 import { createSearchRecord } from './search'
-
-export interface ExportOptions {
-  pretty?: boolean
-  includeMetadata?: boolean
-}
 
 export interface ExportedData {
   notes: any[]
@@ -198,3 +193,5 @@ export function exportWebReadyToJSON(
 export function toJSONString(data: ExportedData | WebReadyExportedData, pretty: boolean = true): string {
   return JSON.stringify(data, null, pretty ? 2 : undefined)
 }
+
+export type { ExportOptions }
