@@ -305,7 +305,8 @@ describe('search', () => {
   describe('getSearchSuggestions', () => {
     it('should return suggestions for partial queries', () => {
       const suggestions = getSearchSuggestions('java', searchIndex)
-      expect(Array.isArray(suggestions)).toBe(true)
+      expect(suggestions).toContain('javascript-basics')
+      expect(suggestions.length).toBeGreaterThan(0)
     })
 
     it('should return empty array for empty query', () => {
@@ -321,6 +322,7 @@ describe('search', () => {
     it('should respect limit parameter', () => {
       const suggestions = getSearchSuggestions('java', searchIndex, 3)
       expect(suggestions.length).toBeLessThanOrEqual(3)
+      expect(suggestions).toContain('javascript-basics')
     })
 
     it('should handle queries with no matches gracefully', () => {

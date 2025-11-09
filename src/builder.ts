@@ -316,14 +316,14 @@ export class PapyrBuilder {
       return normalizedPath.endsWith('.md');
     }
     
-    // Convert glob pattern to regex
-    // Handle ** (matches any number of directories including zero)
-    // Handle * (matches any characters except path separator)
+    // Convert glob pattern to regex while preserving globstars
+    const globstarSentinel = '__PAPYR_GLOBSTAR__';
     const regexPattern = normalizedPattern
-      .replace(/\./g, '\\.')
-      .replace(/\*\*/g, '.*')
+      .replace(/\*\*/g, globstarSentinel)
+      .replace(/[.+^${}()|[\]\\]/g, '\\$&')
       .replace(/\*/g, '[^/]*')
-      .replace(/\?/g, '[^/]');
+      .replace(/\?/g, '[^/]')
+      .replace(new RegExp(globstarSentinel, 'g'), '.*');
     
     const regex = new RegExp(`^${regexPattern}$`);
     const matches = regex.test(normalizedPath);

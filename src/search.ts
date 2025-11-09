@@ -1,4 +1,4 @@
-import * as FlexSearch from 'flexsearch'
+import FlexSearch from 'flexsearch'
 import { 
   ParsedNote, 
   SearchIndex, 
@@ -438,14 +438,53 @@ export function getSearchSuggestions(
       limit,
       suggest: true
     })
-    
-    // Extract unique suggestions
+
     const uniqueSuggestions = new Set<string>()
-    suggestions.forEach((result: any) => {
-      if (typeof result === 'string') {
-        uniqueSuggestions.add(result)
+
+    const enqueue = (value: unknown): void => {
+      if (value === null || value === undefined) {
+        return
       }
-    })
+
+      if (typeof value === 'string') {
+        uniqueSuggestions.add(value)
+        return
+      }
+
+      if (Array.isArray(value)) {
+        value.forEach(enqueue)
+        return
+      }
+
+      if (typeof value === 'object') {
+        const candidate = value as Record<string, unknown>
+
+        const id = candidate.id
+        if (typeof id === 'string') {
+          uniqueSuggestions.add(id)
+        }
+
+        const slug = candidate.slug
+        if (typeof slug === 'string') {
+          uniqueSuggestions.add(slug)
+        }
+
+        const result = candidate.result
+        if (Array.isArray(result)) {
+          result.forEach(enqueue)
+        }
+
+        const doc = candidate.doc
+        if (doc && typeof doc === 'object') {
+          const docSlug = (doc as Record<string, unknown>).slug
+          if (typeof docSlug === 'string') {
+            uniqueSuggestions.add(docSlug)
+          }
+        }
+      }
+    }
+
+    enqueue(suggestions)
 
     return Array.from(uniqueSuggestions).slice(0, limit)
   } catch (error) {

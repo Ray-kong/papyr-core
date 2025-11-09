@@ -609,6 +609,20 @@ describe('PapyrBuilder', () => {
       expect(matchesPattern('note?.md', 'note?.md')).toBe(true); // Question mark wildcard is supported
     });
 
+    it('should treat globstars as multi-level directory matches', () => {
+      const config: BuildConfig = {
+        sourceDir,
+        outputDir
+      };
+
+      const builder = new PapyrBuilder(config);
+      const matchesPattern = (builder as any).matchesPattern.bind(builder);
+
+      expect(matchesPattern('node_modules/package/deep/file.md', 'node_modules/**')).toBe(true);
+      expect(matchesPattern('nested/node_modules/package/deep/file.md', '**/node_modules/**')).toBe(true);
+      expect(matchesPattern('node_modules.md', 'node_modules/**')).toBe(false);
+    });
+
     it('should handle exclusion patterns', () => {
       const config: BuildConfig = {
         sourceDir,
@@ -620,6 +634,7 @@ describe('PapyrBuilder', () => {
 
       // Test with default exclude patterns
       expect(shouldExcludeFile('node_modules/package.md')).toBe(true);
+      expect(shouldExcludeFile('node_modules/package/deep/file.md')).toBe(true);
       expect(shouldExcludeFile('.git/config.md')).toBe(true);
       expect(shouldExcludeFile('note.md')).toBe(false);
     });

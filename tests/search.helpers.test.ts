@@ -156,7 +156,18 @@ describe('metadata indexing', () => {
 describe('getSearchSuggestions', () => {
   const makeStubIndex = (searchImplementation: () => any): SearchIndex => ({
     index: { search: searchImplementation },
-    documents: new Map() as Map<Slug, ParsedNote>
+    documents: new Map() as Map<Slug, ParsedNote>,
+    config: {
+      preset: 'default',
+      tokenize: 'forward',
+      resolution: 9,
+      depth: 4,
+      context: { depth: 4, resolution: 9, bidirectional: false },
+      document: {
+        id: 'slug',
+        index: []
+      }
+    }
   })
 
   it('deduplicates string suggestions from the underlying index', () => {
@@ -169,6 +180,17 @@ describe('getSearchSuggestions', () => {
     const suggestions = getSearchSuggestions('sug', stubIndex, 5)
 
     expect(suggestions).toEqual(['suggestion-one', 'suggestion-two'])
+  })
+
+  it('extracts ids from document-style suggestion responses', () => {
+    const stubIndex = makeStubIndex(() => [
+      { field: 'title', result: [{ id: 'doc-one' }, { id: 'doc-one' }] },
+      { field: 'content', result: ['doc-two'] }
+    ])
+
+    const suggestions = getSearchSuggestions('doc', stubIndex, 5)
+
+    expect(suggestions).toEqual(['doc-one', 'doc-two'])
   })
 
   it('returns an empty array when the index search throws', () => {
