@@ -62,28 +62,30 @@ export class AnalyticsEngine {
     const nodeCount = nodes.length;
     const edgeCount = graph.edges.length;
     
-    // Calculate graph density
-    const maxPossibleEdges = nodeCount * (nodeCount - 1) / 2;
+    // Calculate graph density treating links as directed edges
+    const maxPossibleEdges = nodeCount * (nodeCount - 1);
     const density = maxPossibleEdges > 0 ? edgeCount / maxPossibleEdges : 0;
     
-    // Calculate average degree
-    const totalDegree = nodes.reduce((sum, node) => sum + node.linkCount, 0);
-    const averageDegree = nodeCount > 0 ? totalDegree / nodeCount : 0;
+    // Calculate average out-degree based on the actual directed edges.
+    // This keeps bidirectional graphs accurate even when reverse edges
+    // are synthesized after the initial forward counts are captured.
+    const totalOutDegree = edgeCount;
+    const averageDegree = nodeCount > 0 ? totalOutDegree / nodeCount : 0;
     
     // Calculate connected components
-    const connectedComponents = this.findConnectedComponents(graph);
+    const stronglyConnectedComponents = this.findStronglyConnectedComponents(graph);
     
     // Calculate centrality measures
     const centrality = this.calculateCentralityMeasures(graph);
     
     // Find clusters
-    const clusters = this.findClusters(graph);
+    const clusters = this.findClusters(graph, stronglyConnectedComponents);
 
     return {
       nodeCount,
       edgeCount,
       orphanCount: graph.orphans.size,
-      connectedComponents: connectedComponents.length,
+      connectedComponents: stronglyConnectedComponents.length,
       averageDegree,
       density,
       centrality,
@@ -211,36 +213,68 @@ export class AnalyticsEngine {
     };
   }
 
+  private buildDirectedAdjacency(graph: NoteGraph): Map<string, string[]> {
+    const adjacency = new Map<string, string[]>();
+    graph.nodes.forEach((_, nodeId) => adjacency.set(nodeId, []));
+    graph.edges.forEach(edge => {
+      const list = adjacency.get(edge.source);
+      if (list) {
+        list.push(edge.target);
+      }
+    });
+    return adjacency;
+  }
+
   /**
-   * Find connected components in the graph
+   * Find strongly connected components treating the graph as directed.
    */
-  private findConnectedComponents(graph: NoteGraph): string[][] {
-    const visited = new Set<string>();
+  private findStronglyConnectedComponents(graph: NoteGraph): string[][] {
+    const adjacency = this.buildDirectedAdjacency(graph);
+    const indexMap = new Map<string, number>();
+    const lowLink = new Map<string, number>();
+    const onStack = new Set<string>();
+    const stack: string[] = [];
     const components: string[][] = [];
-    
-    const dfs = (nodeId: string, component: string[]) => {
-      if (visited.has(nodeId)) return;
-      visited.add(nodeId);
-      component.push(nodeId);
-      
-      // Find all connected nodes
-      graph.edges.forEach(edge => {
-        if (edge.source === nodeId && !visited.has(edge.target)) {
-          dfs(edge.target, component);
-        }
-        if (edge.target === nodeId && !visited.has(edge.source)) {
-          dfs(edge.source, component);
+    let index = 0;
+
+    const visit = (nodeId: string) => {
+      indexMap.set(nodeId, index);
+      lowLink.set(nodeId, index);
+      index += 1;
+      stack.push(nodeId);
+      onStack.add(nodeId);
+
+      const neighbors = adjacency.get(nodeId) ?? [];
+      neighbors.forEach(neighbor => {
+        if (!indexMap.has(neighbor)) {
+          visit(neighbor);
+          lowLink.set(
+            nodeId,
+            Math.min(lowLink.get(nodeId)!, lowLink.get(neighbor)!)
+          );
+        } else if (onStack.has(neighbor)) {
+          lowLink.set(
+            nodeId,
+            Math.min(lowLink.get(nodeId)!, indexMap.get(neighbor)!)
+          );
         }
       });
+
+      if (lowLink.get(nodeId) === indexMap.get(nodeId)) {
+        const component: string[] = [];
+        let current: string;
+        do {
+          current = stack.pop()!;
+          onStack.delete(current);
+          component.push(current);
+        } while (current !== nodeId);
+        components.push(component);
+      }
     };
 
     graph.nodes.forEach((_, nodeId) => {
-      if (!visited.has(nodeId)) {
-        const component: string[] = [];
-        dfs(nodeId, component);
-        if (component.length > 0) {
-          components.push(component);
-        }
+      if (!indexMap.has(nodeId)) {
+        visit(nodeId);
       }
     });
 
@@ -280,18 +314,21 @@ export class AnalyticsEngine {
   /**
    * Find clusters in the graph
    */
-  private findClusters(graph: NoteGraph): Array<{ id: string; members: string[]; density: number }> {
-    const components = this.findConnectedComponents(graph);
-    
+  private findClusters(
+    graph: NoteGraph,
+    components: string[][]
+  ): Array<{ id: string; members: string[]; density: number }> {
     return components
       .filter(component => component.length > 2) // Only consider clusters with 3+ nodes
       .map((component, index) => {
-        // Calculate internal density
-        const internalEdges = graph.edges.filter(edge => 
-          component.includes(edge.source) && component.includes(edge.target)
-        ).length;
+        const memberSet = new Set(component);
+        const internalEdges = graph.edges.reduce((count, edge) => {
+          return memberSet.has(edge.source) && memberSet.has(edge.target)
+            ? count + 1
+            : count;
+        }, 0);
         
-        const maxPossibleEdges = component.length * (component.length - 1) / 2;
+        const maxPossibleEdges = component.length * (component.length - 1);
         const density = maxPossibleEdges > 0 ? internalEdges / maxPossibleEdges : 0;
         
         return {

@@ -209,6 +209,24 @@ describe('AnalyticsEngine', () => {
       expect(result.basic.orphanedNotes).toBe(0); // The note is in the graph, so it's not orphaned
     });
 
+    it('should include backlinks when averaging connections', () => {
+      const notes = [
+        createWebReadyNote({ slug: 'alpha', linksTo: ['beta'] }),
+        createWebReadyNote({ slug: 'beta', linksTo: ['alpha'] })
+      ];
+      const graph = createGraphFromEdges(
+        ['alpha', 'beta'],
+        [
+          { source: 'alpha', target: 'beta' },
+          { source: 'beta', target: 'alpha' }
+        ]
+      );
+
+      const result = analytics.calculateAnalytics(notes, graph);
+
+      expect(result.basic.averageConnections).toBeCloseTo(2);
+    });
+
     it('should return zeroed analytics for empty notes and graph', () => {
       const result = analytics.calculateAnalytics([], createGraphFromEdges([], []));
 
@@ -233,8 +251,8 @@ describe('AnalyticsEngine', () => {
       expect(graphAnalytics.edgeCount).toBe(7);
       expect(graphAnalytics.orphanCount).toBe(1);
       expect(graphAnalytics.connectedComponents).toBe(2);
-      expect(graphAnalytics.averageDegree).toBeCloseTo(14 / 6, 5);
-      expect(graphAnalytics.density).toBeCloseTo(7 / 15, 5);
+      expect(graphAnalytics.averageDegree).toBeCloseTo(7 / 6, 5);
+      expect(graphAnalytics.density).toBeCloseTo(7 / 30, 5);
 
       expect(graphAnalytics.centrality.highest[0]).toMatchObject({ id: 'gamma', score: 4 });
       const hubLeaders = graphAnalytics.centrality.hubs.slice(0, 2).map(item => item.id);
@@ -254,7 +272,7 @@ describe('AnalyticsEngine', () => {
       expect(cluster.members).toEqual(
         expect.arrayContaining(['alpha', 'beta', 'gamma', 'delta', 'epsilon'])
       );
-      expect(cluster.density).toBeCloseTo(0.7, 5);
+      expect(cluster.density).toBeCloseTo(0.35, 5);
     });
 
     it('should derive content analytics from word counts and reading times', () => {
@@ -303,7 +321,7 @@ describe('AnalyticsEngine', () => {
       );
     });
 
-    it('should include nodes connected only by backlinks in component traversal', () => {
+    it('should treat backlink-only nodes as standalone directed components', () => {
       const notes = [
         createWebReadyNote({ slug: 'hub', wordCount: 150, readingTime: 2 }),
         createWebReadyNote({ slug: 'leaf-a', linksTo: ['hub'], wordCount: 80, readingTime: 1 }),
@@ -319,7 +337,7 @@ describe('AnalyticsEngine', () => {
 
       const graphAnalytics = analytics.calculateAnalytics(notes, graph).graph;
 
-      expect(graphAnalytics.connectedComponents).toBe(1);
+      expect(graphAnalytics.connectedComponents).toBe(3);
       expect(graphAnalytics.centrality.authorities[0]).toEqual(
         expect.objectContaining({ id: 'hub', score: 2 })
       );
