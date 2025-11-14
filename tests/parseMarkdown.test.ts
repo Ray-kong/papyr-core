@@ -52,6 +52,22 @@ describe('parseMarkdown', () => {
       expect(result.html).toContain('href="#/note/api-reference"')
     })
 
+    it('should support wiki link aliases using pipe syntax', async () => {
+      const content = `
+Link to [[Target Page|Kickoff Notes]] and [[areas/Productivity Systems|Productivity Overview]].
+`
+
+      const result = await parseMarkdown(content)
+
+      expect(result.linksTo).toEqual([
+        'target-page',
+        'productivity-systems'
+      ])
+      expect(result.html).toContain('href="#/note/target-page"')
+      expect(result.html).toContain('>Kickoff Notes<')
+      expect(result.html).toContain('href="#/note/productivity-systems"')
+    })
+
     it('should handle wiki links with special characters', async () => {
       const content = `---
 title: Special Characters

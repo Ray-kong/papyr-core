@@ -12,7 +12,14 @@ export default defineConfig({
     lib: {
       entry: {
         index: 'src/index.ts',
-        runtime: 'src/runtime/index.ts'
+        runtime: 'src/runtime/index.ts',
+        analytics: 'src/analytics.ts',
+        graph: 'src/graph.ts',
+        graphAnalysis: 'src/graphAnalysis.ts',
+        linkResolver: 'src/linkResolver.ts',
+        folderHierarchy: 'src/folderHierarchy.ts',
+        search: 'src/search.ts',
+        jsonExporter: 'src/jsonExporter.ts'
       },
       formats: ['es'],
     },

@@ -128,6 +128,7 @@ export async function parseMarkdown(md: string, options: ParseOptions = {}): Pro
     .use(collectHeadingsPlugin)
     .use(collectCodeBlocksPlugin)
     .use(remarkWikiLink, {
+      aliasDivider: '|',
       pageResolver: (name: string) => {
         const rawName = name.trim()
         if (!rawName) {
