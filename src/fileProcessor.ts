@@ -123,12 +123,13 @@ export async function processMarkdownContents(
   files.sort((a, b) => a.relativePath.localeCompare(b.relativePath))
   
   const processingTime = Date.now() - startTime
+  const attemptedFiles = contents.length
   
   return { 
     files, 
     errors,
     statistics: {
-      totalFiles: files.length,
+      totalFiles: attemptedFiles,
       totalErrors: errors.length,
       processingTime
     }
@@ -160,12 +161,13 @@ export async function processMarkdownContentsToWeb(
   files.sort((a, b) => a.relativePath.localeCompare(b.relativePath))
   
   const processingTime = Date.now() - startTime
+  const attemptedFiles = contents.length
   
   return { 
     files, 
     errors,
     statistics: {
-      totalFiles: files.length,
+      totalFiles: attemptedFiles,
       totalErrors: errors.length,
       processingTime
     }

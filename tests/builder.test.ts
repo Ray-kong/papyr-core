@@ -221,6 +221,43 @@ describe('PapyrBuilder', () => {
     });
   });
 
+  describe('Pattern matching', () => {
+    it('should exclude nested node_modules directories with default patterns', () => {
+      const builder = new PapyrBuilder({ sourceDir, outputDir });
+      const shouldExclude = (builder as any).shouldExcludeFile.bind(builder) as (path: string) => boolean;
+
+      expect(shouldExclude('node_modules/file.md')).toBe(true);
+      expect(shouldExclude('nested/node_modules/file.md')).toBe(true);
+      expect(shouldExclude('deep/nested/node_modules/sub/file.md')).toBe(true);
+      expect(shouldExclude('notes/content.md')).toBe(false);
+    });
+
+    it('should exclude nested .git directories with default patterns', () => {
+      const builder = new PapyrBuilder({ sourceDir, outputDir });
+      const shouldExclude = (builder as any).shouldExcludeFile.bind(builder) as (path: string) => boolean;
+
+      expect(shouldExclude('.git/config')).toBe(true);
+      expect(shouldExclude('nested/.git/config')).toBe(true);
+      expect(shouldExclude('deep/nested/.git/HEAD')).toBe(true);
+      expect(shouldExclude('deep/git-not/folder.md')).toBe(false);
+    });
+
+    it('should keep relative include patterns anchored to source root', () => {
+      const builder = new PapyrBuilder({
+        sourceDir,
+        outputDir,
+        patterns: {
+          include: ['notes/*.md']
+        }
+      });
+      const shouldInclude = (builder as any).shouldIncludeFile.bind(builder) as (path: string) => boolean;
+
+      expect(shouldInclude('notes/file.md')).toBe(true);
+      expect(shouldInclude('archive/notes/file.md')).toBe(false);
+      expect(shouldInclude('notes/subdir/file.md')).toBe(false);
+    });
+  });
+
   describe('Build Pipeline', () => {
     it('should execute successful build', async () => {
       // Create test markdown files

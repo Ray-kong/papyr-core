@@ -192,7 +192,7 @@ Long-form content to ensure we produce multiple words for reading time calculati
       expect(result.errors[0].filePath).toBe('/notes/bad.md');
       expect(result.files).toHaveLength(1);
       expect(result.statistics.totalErrors).toBe(1);
-      expect(result.statistics.totalFiles).toBe(1);
+      expect(result.statistics.totalFiles).toBe(2);
       expect(result.files[0].relativePath).toBe('good.md');
     });
 
@@ -250,7 +250,7 @@ Long-form content to ensure we produce multiple words for reading time calculati
       expect(result.errors).toHaveLength(1);
       expect(result.errors[0].filePath).toBe('/notes/error.md');
       expect(result.statistics.totalErrors).toBe(1);
-      expect(result.statistics.totalFiles).toBe(1);
+      expect(result.statistics.totalFiles).toBe(2);
       expect(result.files).toHaveLength(1);
       expect(result.files[0].relativePath).toBe('good.md');
     });

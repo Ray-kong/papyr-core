@@ -50,7 +50,7 @@ export class PapyrBuilder {
       ...restConfig,
       patterns: {
         include: mergePatterns(['**/*.md'], patterns?.include),
-        exclude: mergePatterns(['node_modules/**', '.git/**'], patterns?.exclude)
+        exclude: mergePatterns(['**/node_modules/**', '**/.git/**'], patterns?.exclude)
       },
       processing: {
         generateExcerpts: true,
@@ -308,14 +308,24 @@ export class PapyrBuilder {
    */
   private matchesPattern(filePath: string, pattern: string): boolean {
     const normalizedPath = this.normalizeGlobPath(filePath);
-    const normalizedPattern = this.normalizeGlobPath(pattern);
+    let normalizedPattern = this.normalizeGlobPath(pattern).replace(/^\.\//, '');
+
+    if (normalizedPattern.endsWith('/')) {
+      normalizedPattern = `${normalizedPattern}**`;
+    }
 
     // Special handling for common patterns
     if (normalizedPattern === '**/*.md') {
       // This should match any .md file at any level (including root)
       return normalizedPath.endsWith('.md');
     }
-    
+
+    let leadingDeepMatch = '';
+    if (normalizedPattern.startsWith('**/')) {
+      normalizedPattern = normalizedPattern.slice(3);
+      leadingDeepMatch = '(?:^|.*/)';
+    }
+
     // Convert glob pattern to regex while preserving globstars
     const globstarSentinel = '__PAPYR_GLOBSTAR__';
     const regexPattern = normalizedPattern
@@ -324,11 +334,12 @@ export class PapyrBuilder {
       .replace(/\*/g, '[^/]*')
       .replace(/\?/g, '[^/]')
       .replace(new RegExp(globstarSentinel, 'g'), '.*');
-    
-    const regex = new RegExp(`^${regexPattern}$`);
+
+    const regexSource = `^${leadingDeepMatch}${regexPattern}$`;
+    const regex = new RegExp(regexSource);
     const matches = regex.test(normalizedPath);
     
-    console.log(`🔍 Pattern match: "${normalizedPath}" vs "${normalizedPattern}" -> ${matches ? '✅' : '❌'} (regex: ${regexPattern})`);
+    console.log(`🔍 Pattern match: "${normalizedPath}" vs "${normalizedPattern}" -> ${matches ? '✅' : '❌'} (regex: ${regex.source})`);
     return matches;
   }
 
