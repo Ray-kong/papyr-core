@@ -68,6 +68,40 @@ Link to [[Target Page|Kickoff Notes]] and [[areas/Productivity Systems|Productiv
       expect(result.html).toContain('href="#/note/productivity-systems"')
     })
 
+    it('should keep alias text separate from nested path slugs', async () => {
+      const content = `
+Link to [[Areas/Deep Work/Focus Ritual|Deep Focus Ritual]] and [[projects/papyr launch|Launch Plan Overview]].
+`
+
+      const result = await parseMarkdown(content)
+
+      expect(result.linksTo).toEqual([
+        'focus-ritual',
+        'papyr-launch'
+      ])
+      expect(result.html).toContain('href="#/note/focus-ritual"')
+      expect(result.html).toContain('>Deep Focus Ritual<')
+      expect(result.html).toContain('href="#/note/papyr-launch"')
+      expect(result.html).toContain('>Launch Plan Overview<')
+    })
+
+    it('should properly resolve aliases that include heading fragments', async () => {
+      const content = `
+Reference [[Reference Guide#Deep Dive|Installation Deep Dive]] and [[API Reference#Authentication|Auth Callouts]].
+`
+
+      const result = await parseMarkdown(content)
+
+      expect(result.linksTo).toEqual([
+        'reference-guide',
+        'api-reference'
+      ])
+      expect(result.html).toContain('href="#/note/reference-guide#deep-dive"')
+      expect(result.html).toContain('>Installation Deep Dive<')
+      expect(result.html).toContain('href="#/note/api-reference#authentication"')
+      expect(result.html).toContain('>Auth Callouts<')
+    })
+
     it('should handle wiki links with special characters', async () => {
       const content = `---
 title: Special Characters
