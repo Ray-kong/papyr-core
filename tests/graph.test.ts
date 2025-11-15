@@ -120,6 +120,29 @@ describe('buildNoteGraph', () => {
       expect(graph.nodes.has('c')).toBe(true)
       expect(graph.nodes.has('d')).toBe(false)
     })
+
+    it('should recompute backlinks and counts after filtering nodes', () => {
+      const notes: ParsedNote[] = [
+        createNote('a', []),
+        createNote('b', ['a']),
+        createNote('c', ['a'])
+      ]
+
+      const graph = buildNoteGraph(notes, { minimumConnections: 2 })
+
+      expect(graph.nodes.has('b')).toBe(false)
+      expect(graph.nodes.has('c')).toBe(false)
+      expect(graph.backlinks.has('b')).toBe(false)
+      expect(getBacklinks('a', graph)).toEqual([])
+
+      const nodeA = graph.nodes.get('a')!
+      expect(nodeA.backlinkCount).toBe(0)
+      expect(nodeA.forwardLinkCount).toBe(0)
+      expect(nodeA.linkCount).toBe(0)
+
+      expect(graph.edges.length).toBe(0)
+      expect(graph.orphans.has('a')).toBe(true)
+    })
   })
 
   describe('Node statistics', () => {

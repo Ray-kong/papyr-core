@@ -68,22 +68,23 @@ export function buildNoteGraph(
     })
   })
 
-  // Third pass: Update link counts and identify orphans
+  // Third pass: Update link counts, identify orphans, and flag nodes to remove
+  const nodesToRemove: string[] = []
   nodes.forEach((node, slug) => {
     const backlinkSet = backlinks.get(slug) || new Set()
     node.backlinkCount = backlinkSet.size
     node.linkCount = node.forwardLinkCount + node.backlinkCount
-    
-    // Check if node meets minimum connection threshold
+
     if (node.linkCount === 0) {
       orphans.add(slug)
     }
-    
-    // Remove nodes that don't meet minimum connections
+
     if (node.linkCount < minimumConnections) {
-      nodes.delete(slug)
+      nodesToRemove.push(slug)
     }
   })
+
+  nodesToRemove.forEach(slug => nodes.delete(slug))
 
   // Remove orphans if not included
   if (!includeOrphans) {
@@ -94,6 +95,43 @@ export function buildNoteGraph(
   const filteredEdges = edges.filter(edge => 
     nodes.has(edge.source) && nodes.has(edge.target)
   )
+
+  // Filter backlinks to only include existing nodes
+  backlinks.clear()
+  nodes.forEach((_, slug) => backlinks.set(slug, new Set()))
+  filteredEdges.forEach(edge => {
+    backlinks.get(edge.target)!.add(edge.source)
+  })
+
+  // Recompute link metrics based on filtered edges
+  nodes.forEach(node => {
+    node.forwardLinkCount = 0
+    node.backlinkCount = 0
+    node.linkCount = 0
+  })
+
+  filteredEdges.forEach(edge => {
+    const sourceNode = nodes.get(edge.source)
+    if (sourceNode) {
+      sourceNode.forwardLinkCount += 1
+    }
+    const targetNode = nodes.get(edge.target)
+    if (targetNode) {
+      targetNode.backlinkCount += 1
+    }
+  })
+
+  nodes.forEach(node => {
+    node.linkCount = node.forwardLinkCount + node.backlinkCount
+  })
+
+  // Refresh orphan tracking for the remaining nodes
+  orphans.clear()
+  nodes.forEach((node, slug) => {
+    if (node.linkCount === 0) {
+      orphans.add(slug)
+    }
+  })
 
   return {
     nodes,

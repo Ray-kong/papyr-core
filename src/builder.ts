@@ -19,6 +19,12 @@ import { AnalyticsEngine } from './analytics.js';
 import { buildFolderHierarchy } from './folderHierarchy.js';
 import { type FolderNode } from './types.js';
 
+const DEFAULT_INCLUDE_PATTERNS = ['**/*.md'];
+const DEFAULT_EXCLUDE_PATTERNS = ['**/node_modules/**', '**/.git/**'];
+const MARKDOWN_EXTENSION_REGEX = /\.md\b/i;
+
+const isMarkdownPattern = (pattern: string): boolean => MARKDOWN_EXTENSION_REGEX.test(pattern);
+
 /**
  * PapyrBuilder - Automated build pipeline for Papyr projects
  * 
@@ -46,11 +52,20 @@ export class PapyrBuilder {
       return Array.from(new Set([...defaults, ...overrides]));
     };
 
+    const includeOverrides = patterns?.include ?? [];
+    const hasIncludeOverrides = includeOverrides.length > 0;
+    const hasNonMarkdownIncludes = includeOverrides.some(pattern => !isMarkdownPattern(pattern));
+    const includePatterns = !hasIncludeOverrides
+      ? [...DEFAULT_INCLUDE_PATTERNS]
+      : hasNonMarkdownIncludes
+        ? Array.from(new Set([...DEFAULT_INCLUDE_PATTERNS, ...includeOverrides]))
+        : includeOverrides;
+
     this.config = {
       ...restConfig,
       patterns: {
-        include: mergePatterns(['**/*.md'], patterns?.include),
-        exclude: mergePatterns(['**/node_modules/**', '**/.git/**'], patterns?.exclude)
+        include: includePatterns,
+        exclude: mergePatterns(DEFAULT_EXCLUDE_PATTERNS, patterns?.exclude)
       },
       processing: {
         generateExcerpts: true,
