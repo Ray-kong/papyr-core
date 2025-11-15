@@ -34,6 +34,7 @@ export async function parseMarkdown(md: string, options: ParseOptions = {}): Pro
   const headingSlugCounts = new Map<string, number>()
   const collectedCodeBlocks: CodeBlock[] = []
   const selfAnchorPlaceholders = new Map<string, string>()
+  const referenceDefinitions = new Map<string, string>()
 
   const normalizeHeadingKey = (value: string): string => value.trim().toLowerCase()
 
@@ -119,6 +120,52 @@ export async function parseMarkdown(md: string, options: ParseOptions = {}): Pro
     })
   }
 
+  const collectMarkdownLinksPlugin = () => (tree: unknown) => {
+    referenceDefinitions.clear()
+
+    visit(tree as any, 'definition', (node: any) => {
+      if (
+        !node ||
+        typeof node.identifier !== 'string' ||
+        typeof node.url !== 'string'
+      ) {
+        return
+      }
+      const identifier = node.identifier.toLowerCase()
+      if (!referenceDefinitions.has(identifier)) {
+        referenceDefinitions.set(identifier, node.url)
+      }
+    })
+
+    visit(tree as any, 'link', (node: any) => {
+      if (!node || typeof node.url !== 'string') {
+        return
+      }
+
+      const slug = extractNoteSlugFromLink(node.url)
+      if (slug) {
+        linksTo.add(slug)
+      }
+    })
+
+    visit(tree as any, 'linkReference', (node: any) => {
+      if (!node || typeof node.identifier !== 'string') {
+        return
+      }
+
+      const identifier = node.identifier.toLowerCase()
+      const url = referenceDefinitions.get(identifier)
+      if (!url) {
+        return
+      }
+
+      const slug = extractNoteSlugFromLink(url)
+      if (slug) {
+        linksTo.add(slug)
+      }
+    })
+  }
+
   const SELF_ANCHOR_PREFIX = '__papyr_self_anchor__#'
   const SELF_ANCHOR_LINK_PREFIX = '#__papyr_anchor__'
 
@@ -127,6 +174,7 @@ export async function parseMarkdown(md: string, options: ParseOptions = {}): Pro
     .use(remarkGfm)
     .use(collectHeadingsPlugin)
     .use(collectCodeBlocksPlugin)
+    .use(collectMarkdownLinksPlugin)
     .use(remarkWikiLink, {
       aliasDivider: '|',
       pageResolver: (name: string) => {
@@ -362,6 +410,109 @@ function extractHeadingText(node: any): string {
   }
 
   return ''
+}
+
+function extractNoteSlugFromLink(rawUrl: string): string | null {
+  const trimmed = rawUrl.trim()
+  if (!trimmed || trimmed.startsWith('#')) {
+    return null
+  }
+
+  const lowerUrl = trimmed.toLowerCase()
+  const hasScheme = /^[a-z][a-z0-9+.-]*:/.test(trimmed)
+
+  if (hasScheme && !lowerUrl.startsWith('obsidian://')) {
+    return null
+  }
+
+  if (lowerUrl.startsWith('obsidian://')) {
+    try {
+      const obsidianUrl = new URL(trimmed)
+      const fileParam =
+        obsidianUrl.searchParams.get('file') ??
+        obsidianUrl.searchParams.get('path')
+      if (!fileParam) {
+        return null
+      }
+
+      const decodedPath = decodePathSegment(fileParam)
+      const segments = decodedPath.replace(/\\/g, '/').split('/').filter(Boolean)
+      const lastSegment = segments[segments.length - 1]
+      if (!lastSegment) {
+        return null
+      }
+
+      const sanitized = sanitizeLinkSegment(lastSegment)
+      if (!sanitized) {
+        return null
+      }
+
+      const slug = slugify(sanitized, { lower: true, strict: true })
+      return slug || null
+    } catch {
+      return null
+    }
+  }
+
+  const withoutQuery = trimmed.split('?')[0]
+  const pathPart = withoutQuery.split('#')[0]
+  const normalized = pathPart
+    .replace(/\\/g, '/')
+    .replace(/^\.\//, '')
+    .replace(/^\/+/, '')
+
+  if (!normalized) {
+    return null
+  }
+
+  const segments = normalized
+    .split('/')
+    .map(seg => seg.trim())
+    .filter(seg => seg.length > 0 && seg !== '.')
+
+  if (segments.length === 0) {
+    return null
+  }
+
+  const lastSegment = segments[segments.length - 1]
+  if (lastSegment === '..') {
+    return null
+  }
+
+  const decodedSegment = decodePathSegment(lastSegment)
+  const sanitized = sanitizeLinkSegment(decodedSegment)
+  if (!sanitized) {
+    return null
+  }
+
+  const slug = slugify(sanitized, { lower: true, strict: true })
+  return slug || null
+}
+
+function sanitizeLinkSegment(segment: string): string {
+  const trimmed = segment.trim()
+  if (!trimmed) {
+    return ''
+  }
+
+  const extensionMatch = trimmed.match(/\.([^.]+)$/)
+  if (extensionMatch) {
+    const extension = extensionMatch[1]
+    if (!/^(md|markdown)$/i.test(extension)) {
+      return ''
+    }
+    return trimmed.slice(0, -extensionMatch[0].length)
+  }
+
+  return trimmed
+}
+
+function decodePathSegment(segment: string): string {
+  try {
+    return decodeURIComponent(segment)
+  } catch {
+    return segment
+  }
 }
 
 function normalizeStringArray(value: unknown): string[] {

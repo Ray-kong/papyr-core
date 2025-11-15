@@ -180,6 +180,84 @@ Refer to [[Reference Guide#Deep Dive]].`
     })
   })
 
+  describe('Markdown links', () => {
+    it('should extract relative markdown links that reference other notes', async () => {
+      const content = `
+[Install guide](Download%20and%20install%20Obsidian.md)
+[Sync tips](./sync-your-notes-across-devices.md#mobile)
+[Credits reference](../credits.md)
+[Ignore assets](images/cover.png)
+`
+
+      const result = await parseMarkdown(content)
+
+      expect(result.linksTo).toEqual([
+        'download-and-install-obsidian',
+        'sync-your-notes-across-devices',
+        'credits'
+      ])
+    })
+
+    it('should capture Obsidian protocol links with file parameters', async () => {
+      const content = `
+[Publish intro](obsidian://open?vault=Help&file=Introduction%20to%20Obsidian%20Publish)
+[Sync intro](obsidian://open?vault=Help&path=Introduction%20to%20Obsidian%20Sync.md)
+`
+
+      const result = await parseMarkdown(content)
+
+      expect(result.linksTo).toEqual([
+        'introduction-to-obsidian-publish',
+        'introduction-to-obsidian-sync'
+      ])
+    })
+
+    it('should ignore pure anchor or external markdown links', async () => {
+      const content = `
+[Jump](#section)
+[External](https://example.com/docs)
+`
+
+      const result = await parseMarkdown(content)
+
+      expect(result.linksTo).toEqual([])
+    })
+
+    it('should capture reference-style markdown links', async () => {
+      const content = `
+[Install guide][install]
+
+[install]: ./Download%20and%20install%20Obsidian.md
+
+[Theme reference][theme]
+
+[theme]: themes.md
+`
+
+      const result = await parseMarkdown(content)
+
+      expect(result.linksTo).toEqual([
+        'download-and-install-obsidian',
+        'themes'
+      ])
+    })
+
+    it('should prefer first reference definition when duplicates exist', async () => {
+      const content = `
+[Install guide][install]
+
+[install]: ./Download%20and%20install%20Obsidian.md
+[install]: ./duplicate.md
+`
+
+      const result = await parseMarkdown(content)
+
+      expect(result.linksTo).toEqual([
+        'download-and-install-obsidian'
+      ])
+    })
+  })
+
   describe('Slug generation', () => {
     it('should use slug from frontmatter when available', async () => {
       const content = `---
