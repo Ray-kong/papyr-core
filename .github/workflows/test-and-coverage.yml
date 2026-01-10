@@ -1,0 +1,90 @@
+name: Test and Coverage
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  test-and-coverage:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Install pnpm
+      uses: pnpm/action-setup@v2
+      with:
+        version: 8
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'pnpm'
+
+    - name: Install dependencies
+      run: pnpm install
+
+    - name: Run tests with coverage
+      run: pnpm test:coverage
+
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage/lcov.info
+        fail_ci_if_error: false
+        verbose: true
+
+    - name: Extract coverage percentage
+      id: coverage
+      run: |
+        if [ -f coverage/lcov.info ]; then
+          COVERAGE=$(awk 'BEGIN {LF=0; LH=0} /^LF:/ {gsub(/LF:/,""); LF+=$1} /^LH:/ {gsub(/LH:/,""); LH+=$1} END {if(LF>0) printf "%.1f", (LH/LF)*100; else print "0.0"}' coverage/lcov.info)
+        else
+          echo "Coverage file not found, using 0.0"
+          COVERAGE="0.0"
+        fi
+        echo "coverage=$COVERAGE" >> $GITHUB_OUTPUT
+        
+        # Determine color based on coverage percentage
+        if (( $(echo "$COVERAGE >= 90" | bc -l) )); then
+          COLOR="brightgreen"
+        elif (( $(echo "$COVERAGE >= 80" | bc -l) )); then
+          COLOR="green"
+        elif (( $(echo "$COVERAGE >= 70" | bc -l) )); then
+          COLOR="yellow"
+        elif (( $(echo "$COVERAGE >= 60" | bc -l) )); then
+          COLOR="orange"
+        else
+          COLOR="red"
+        fi
+        echo "color=$COLOR" >> $GITHUB_OUTPUT
+
+    - name: Update README with coverage badge
+      run: |
+        # Generate new coverage badge
+        COVERAGE="${{ steps.coverage.outputs.coverage }}"
+        COLOR="${{ steps.coverage.outputs.color }}"
+        BADGE_URL="https://img.shields.io/badge/coverage-${COVERAGE}%25-${COLOR}?logo=vitest&style=flat"
+        
+        # Use sed to replace the entire coverage badge line
+        # This regex matches the full coverage badge line and replaces it completely
+        sed -i "s|^\[\!\[coverage\].*$|[![coverage]($BADGE_URL)](https://github.com/Ray-kong/papyr-core)|" README.md
+
+    - name: Commit and push coverage badge
+      run: |
+        git config --local user.email "github-actions[bot]@users.noreply.github.com"
+        git config --local user.name "github-actions[bot]"
+        git add README.md
+        git diff --quiet && git diff --staged --quiet || git commit -m "docs: update coverage badge to ${{ steps.coverage.outputs.coverage }}% [skip ci]"
+        git push
